@@ -143,7 +143,7 @@ export default function Historique({ benevole }) {
                   <th>Mode</th>
                   <th>Détail</th>
                   <th>Total</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,3 +228,4 @@ export default function Historique({ benevole }) {
     </div>
   )
 }
+
