@@ -131,6 +131,11 @@ export default function Login({ onConnecte }) {
           </div>
         )}
       </div>
+
+      <footer className="pied-page pied-page-connexion">
+        <img src="/logo-gb-kreation.png" alt="" className="logo-pied-page" />
+        Site créé par GB-Kréation
+      </footer>
     </div>
   )
 }
