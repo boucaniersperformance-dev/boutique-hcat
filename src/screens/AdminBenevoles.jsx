@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
 export default function AdminBenevoles({ benevole }) {
@@ -10,7 +10,12 @@ export default function AdminBenevoles({ benevole }) {
   const [nouveauRole, setNouveauRole] = useState('benevole')
   const [creationEnCours, setCreationEnCours] = useState(false)
   const [erreurCreation, setErreurCreation] = useState(null)
-  const [pinsModifies, setPinsModifies] = useState({})
+
+  const [ligneOuverte, setLigneOuverte] = useState(null)
+  const [roleEdite, setRoleEdite] = useState('benevole')
+  const [nouveauPinEdite, setNouveauPinEdite] = useState('')
+  const [erreurEdition, setErreurEdition] = useState(null)
+  const [actionEnCours, setActionEnCours] = useState(false)
 
   const charger = useCallback(async () => {
     setErreur(null)
@@ -62,26 +67,86 @@ export default function AdminBenevoles({ benevole }) {
     charger()
   }
 
+  function ouvrirEdition(cible) {
+    if (ligneOuverte === cible.id) {
+      setLigneOuverte(null)
+      return
+    }
+    setLigneOuverte(cible.id)
+    setRoleEdite(cible.role)
+    setNouveauPinEdite('')
+    setErreurEdition(null)
+  }
+
+  async function enregistrerRole(cible) {
+    if (roleEdite === cible.role) return
+    setActionEnCours(true)
+    setErreurEdition(null)
+    const { error } = await supabase.rpc('changer_role_benevole', {
+      p_benevole_id: benevole.id,
+      p_cible_id: cible.id,
+      p_role: roleEdite,
+    })
+    setActionEnCours(false)
+    if (error) {
+      setErreurEdition(error.message || 'Erreur lors du changement de rôle.')
+      return
+    }
+    charger()
+  }
+
+  async function reinitialiserPin(cible) {
+    if (!/^\d{4}$/.test(nouveauPinEdite)) {
+      setErreurEdition('Le nouveau code doit contenir exactement 4 chiffres.')
+      return
+    }
+    setActionEnCours(true)
+    setErreurEdition(null)
+    const { error } = await supabase.rpc('changer_pin_benevole', {
+      p_benevole_id: benevole.id,
+      p_cible_id: cible.id,
+      p_nouveau_pin: nouveauPinEdite,
+    })
+    setActionEnCours(false)
+    if (error) {
+      setErreurEdition('Erreur lors de la réinitialisation du code.')
+      return
+    }
+    setNouveauPinEdite('')
+  }
+
   async function changerStatut(cible) {
-    await supabase.rpc('changer_statut_benevole', {
+    setActionEnCours(true)
+    const { error } = await supabase.rpc('changer_statut_benevole', {
       p_benevole_id: benevole.id,
       p_cible_id: cible.id,
       p_actif: !cible.actif,
     })
+    setActionEnCours(false)
+    if (error) {
+      setErreurEdition(error.message || 'Erreur lors du changement de statut.')
+      return
+    }
     charger()
   }
 
-  async function changerPin(cible) {
-    const nouveauPinCible = pinsModifies[cible.id]
-    if (!/^\d{4}$/.test(nouveauPinCible || '')) return
-    const { error } = await supabase.rpc('changer_pin_benevole', {
+  async function supprimer(cible) {
+    const confirme = window.confirm(
+      `Supprimer définitivement ${cible.nom} ? Cette action est irréversible (mais son historique de ventes est conservé).`
+    )
+    if (!confirme) return
+    setActionEnCours(true)
+    const { error } = await supabase.rpc('supprimer_benevole', {
       p_benevole_id: benevole.id,
       p_cible_id: cible.id,
-      p_nouveau_pin: nouveauPinCible,
     })
-    if (!error) {
-      setPinsModifies((p) => ({ ...p, [cible.id]: '' }))
+    setActionEnCours(false)
+    if (error) {
+      window.alert(error.message || "Impossible de supprimer ce bénévole.")
+      return
     }
+    setLigneOuverte(null)
+    charger()
   }
 
   if (chargement) return <div className="chargement">Chargement…</div>
@@ -134,50 +199,105 @@ export default function AdminBenevoles({ benevole }) {
               <th>Nom</th>
               <th>Rôle</th>
               <th>Statut</th>
-              <th>Nouveau code</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {benevoles.map((b) => (
-              <tr key={b.id}>
-                <td>{b.nom}</td>
-                <td>
-                  <span className={`pastille ${b.role}`}>{b.role}</span>
-                </td>
-                <td>
-                  <span className={`pastille ${b.actif ? 'actif' : 'inactif'}`}>
-                    {b.actif ? 'actif' : 'inactif'}
-                  </span>
-                </td>
-                <td>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={4}
-                    value={pinsModifies[b.id] || ''}
-                    onChange={(e) =>
-                      setPinsModifies((p) => ({
-                        ...p,
-                        [b.id]: e.target.value.replace(/\D/g, ''),
-                      }))
-                    }
-                    placeholder="1234"
-                  />
-                  <button
-                    className="bouton-secondaire"
-                    disabled={!/^\d{4}$/.test(pinsModifies[b.id] || '')}
-                    onClick={() => changerPin(b)}
-                  >
-                    Modifier
-                  </button>
-                </td>
-                <td>
-                  <button className="bouton-secondaire" onClick={() => changerStatut(b)}>
-                    {b.actif ? 'Désactiver' : 'Réactiver'}
-                  </button>
-                </td>
-              </tr>
+              <Fragment key={b.id}>
+                <tr>
+                  <td>{b.nom}</td>
+                  <td>
+                    <span className={`pastille ${b.role}`}>{b.role}</span>
+                  </td>
+                  <td>
+                    <span className={`pastille ${b.actif ? 'actif' : 'inactif'}`}>
+                      {b.actif ? 'actif' : 'inactif'}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="bouton-icone"
+                      title="Modifier"
+                      onClick={() => ouvrirEdition(b)}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="bouton-icone"
+                      title="Supprimer"
+                      disabled={actionEnCours}
+                      onClick={() => supprimer(b)}
+                    >
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+                {ligneOuverte === b.id && (
+                  <tr>
+                    <td colSpan={4}>
+                      <div className="panneau-edition">
+                        <div className="champ">
+                          <label>Rôle</label>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <select
+                              value={roleEdite}
+                              onChange={(e) => setRoleEdite(e.target.value)}
+                            >
+                              <option value="benevole">Bénévole</option>
+                              <option value="responsable">Responsable</option>
+                            </select>
+                            <button
+                              className="bouton-secondaire"
+                              disabled={actionEnCours || roleEdite === b.role}
+                              onClick={() => enregistrerRole(b)}
+                            >
+                              Enregistrer le rôle
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="champ">
+                          <label>
+                            Réinitialiser le code (par sécurité, un code déjà
+                            créé ne peut pas être ré-affiché — seulement
+                            remplacé par un nouveau)
+                          </label>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={4}
+                              value={nouveauPinEdite}
+                              onChange={(e) =>
+                                setNouveauPinEdite(e.target.value.replace(/\D/g, ''))
+                              }
+                              placeholder="Nouveau code à 4 chiffres"
+                            />
+                            <button
+                              className="bouton-secondaire"
+                              disabled={actionEnCours || !/^\d{4}$/.test(nouveauPinEdite)}
+                              onClick={() => reinitialiserPin(b)}
+                            >
+                              Réinitialiser
+                            </button>
+                          </div>
+                        </div>
+
+                        <button
+                          className="bouton-secondaire"
+                          disabled={actionEnCours}
+                          onClick={() => changerStatut(b)}
+                        >
+                          {b.actif ? 'Désactiver (peut être réactivé)' : 'Réactiver'}
+                        </button>
+
+                        {erreurEdition && <p className="erreur">{erreurEdition}</p>}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>

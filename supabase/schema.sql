@@ -77,13 +77,25 @@ create unique index if not exists variantes_sans_taille_uidx
 
 create table if not exists ventes (
   id uuid primary key default gen_random_uuid(),
-  benevole_id uuid not null references benevoles(id),
+  benevole_id uuid references benevoles(id) on delete set null,
+  benevole_nom text, -- copie du nom au moment de la vente (survit à la suppression du bénévole)
   mode_paiement text not null check (mode_paiement in ('cb', 'especes')),
   total numeric(10,2) not null,
   montant_recu numeric(10,2),
   monnaie_rendue numeric(10,2),
   created_at timestamptz not null default now()
 );
+
+-- Migration pour un projet où la table `ventes` existait déjà avant cet
+-- ajout : on rend benevole_id supprimable sans casser l'historique, on
+-- ajoute la colonne de copie du nom, et on la remplit rétroactivement.
+alter table ventes add column if not exists benevole_nom text;
+alter table ventes alter column benevole_id drop not null;
+alter table ventes drop constraint if exists ventes_benevole_id_fkey;
+alter table ventes add constraint ventes_benevole_id_fkey
+  foreign key (benevole_id) references benevoles(id) on delete set null;
+update ventes v set benevole_nom = b.nom
+  from benevoles b where b.id = v.benevole_id and v.benevole_nom is null;
 
 create table if not exists ventes_lignes (
   id uuid primary key default gen_random_uuid(),
@@ -220,8 +232,8 @@ begin
     v_monnaie := null;
   end if;
 
-  insert into ventes (benevole_id, mode_paiement, total, montant_recu, monnaie_rendue)
-  values (p_benevole_id, p_mode_paiement, v_total, p_montant_recu, v_monnaie)
+  insert into ventes (benevole_id, benevole_nom, mode_paiement, total, montant_recu, monnaie_rendue)
+  values (p_benevole_id, v_benevole.nom, p_mode_paiement, v_total, p_montant_recu, v_monnaie)
   returning id into v_vente_id;
 
   for r in
@@ -412,6 +424,77 @@ begin
 end;
 $$;
 
+-- Change le rôle d'un bénévole existant (responsable uniquement). Empêche
+-- de se retrouver sans aucun responsable actif.
+create or replace function changer_role_benevole(
+  p_benevole_id uuid,
+  p_cible_id uuid,
+  p_role text
+) returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if not exists (
+    select 1 from benevoles b
+    where b.id = p_benevole_id and b.role = 'responsable' and b.actif = true
+  ) then
+    raise exception 'Action réservée aux responsables';
+  end if;
+
+  if p_role not in ('benevole', 'responsable') then
+    raise exception 'Rôle invalide';
+  end if;
+
+  if p_role = 'benevole' and (
+    select count(*) from benevoles
+    where role = 'responsable' and actif = true and id <> p_cible_id
+  ) = 0 then
+    raise exception 'Impossible : il doit rester au moins un responsable actif';
+  end if;
+
+  update benevoles set role = p_role where id = p_cible_id;
+end;
+$$;
+
+-- Supprime définitivement un bénévole (responsable uniquement). Son
+-- historique de ventes est conservé (le nom y est déjà recopié), seule la
+-- fiche bénévole disparaît. Empêche de se supprimer soi-même et de
+-- supprimer le dernier responsable actif.
+create or replace function supprimer_benevole(
+  p_benevole_id uuid,
+  p_cible_id uuid
+) returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if not exists (
+    select 1 from benevoles b
+    where b.id = p_benevole_id and b.role = 'responsable' and b.actif = true
+  ) then
+    raise exception 'Action réservée aux responsables';
+  end if;
+
+  if p_cible_id = p_benevole_id then
+    raise exception 'Tu ne peux pas supprimer ton propre compte';
+  end if;
+
+  if (select role from benevoles where id = p_cible_id) = 'responsable'
+    and (
+      select count(*) from benevoles
+      where role = 'responsable' and actif = true and id <> p_cible_id
+    ) = 0
+  then
+    raise exception 'Impossible : il doit rester au moins un responsable actif';
+  end if;
+
+  delete from benevoles where id = p_cible_id;
+end;
+$$;
+
 -- Historique des ventes sur une période (responsable uniquement).
 create or replace function lister_ventes(
   p_benevole_id uuid,
@@ -443,7 +526,7 @@ begin
     select
       v.id,
       v.created_at,
-      b.nom,
+      coalesce(v.benevole_nom, b.nom, 'Bénévole supprimé'),
       v.mode_paiement,
       v.total,
       v.montant_recu,
@@ -453,11 +536,11 @@ begin
         E'\n' order by vl.nom_produit
       )
     from ventes v
-    join benevoles b on b.id = v.benevole_id
+    left join benevoles b on b.id = v.benevole_id
     join ventes_lignes vl on vl.vente_id = v.id
     where v.created_at::date >= p_date_debut
       and v.created_at::date <= p_date_fin
-    group by v.id, v.created_at, b.nom, v.mode_paiement, v.total, v.montant_recu, v.monnaie_rendue
+    group by v.id, v.created_at, v.benevole_nom, b.nom, v.mode_paiement, v.total, v.montant_recu, v.monnaie_rendue
     order by v.created_at desc;
 end;
 $$;
@@ -478,6 +561,8 @@ grant execute on function lister_benevoles(uuid) to authenticated;
 grant execute on function ajouter_benevole(uuid, text, text, text) to authenticated;
 grant execute on function changer_statut_benevole(uuid, uuid, boolean) to authenticated;
 grant execute on function changer_pin_benevole(uuid, uuid, text) to authenticated;
+grant execute on function changer_role_benevole(uuid, uuid, text) to authenticated;
+grant execute on function supprimer_benevole(uuid, uuid) to authenticated;
 grant execute on function lister_ventes(uuid, date, date) to authenticated;
 
 -- ---------------------------------------------------------------------

@@ -723,6 +723,24 @@ table.tableau-admin input[type="text"] {
   color: #b91c1c;
 }
 
+.bouton-icone {
+  border: 1px solid var(--bordure);
+  background: var(--fond);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 1rem;
+  margin-right: 6px;
+}
+
+.panneau-edition {
+  background: var(--fond);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .filtre-barre {
   display: flex;
   gap: 10px;
