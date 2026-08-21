@@ -1039,6 +1039,19 @@ table.tableau-admin input[type="text"] {
   gap: 14px;
 }
 
+/* Les champs texte d'un panneau d'édition doivent rester lisibles même
+   dans une table admin, où input[type="text"] est par ailleurs restreint
+   à 90px pour les petites cases de saisie inline. */
+table.tableau-admin .panneau-edition input[type="text"] {
+  width: 100%;
+  max-width: 360px;
+}
+
+.reference-produit {
+  font-size: 0.78rem;
+  color: var(--texte-clair);
+}
+
 .filtre-barre {
   display: flex;
   gap: 10px;
