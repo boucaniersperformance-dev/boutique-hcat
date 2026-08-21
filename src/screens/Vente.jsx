@@ -66,7 +66,7 @@ export default function Vente({ benevole }) {
     chargerProduits()
   }, [chargerProduits])
 
-  function ajouterAuPanier(produit, { taille, quantite }) {
+  function ajouterLigneAuPanier(produit, { taille, quantite }) {
     const variante = (produit.variantes_produit || []).find(
       (v) => (v.taille || null) === (taille || null)
     )
@@ -91,7 +91,19 @@ export default function Vente({ benevole }) {
         },
       ]
     })
+  }
+
+  function ajouterAuPanier(produit, choix) {
+    ajouterLigneAuPanier(produit, choix)
     setProduitOuvert(null)
+  }
+
+  // Ajoute l'article puis ouvre directement le paiement, pour gagner du
+  // temps quand la personne n'achète qu'un seul article.
+  function ajouterEtPayer(produit, choix) {
+    ajouterLigneAuPanier(produit, choix)
+    setProduitOuvert(null)
+    setPaiementOuvert(true)
   }
 
   function modifierQuantite(cle, delta) {
@@ -157,6 +169,15 @@ export default function Vente({ benevole }) {
     setCategoriesActives((etat) => ({ ...etat, [cle]: !etat[cle] }))
   }
 
+  const toutesCategoriesActives = CATEGORIES.every((c) => categoriesActives[c.cle])
+
+  function basculerToutesCategories() {
+    const nouvelEtat = !toutesCategoriesActives
+    setCategoriesActives(
+      Object.fromEntries(CATEGORIES.map((c) => [c.cle, nouvelEtat]))
+    )
+  }
+
   if (chargement) return <div className="chargement">Chargement des produits…</div>
   if (erreur) return <p className="erreur">{erreur}</p>
 
@@ -164,6 +185,13 @@ export default function Vente({ benevole }) {
     <div className="ecran-vente">
       <aside className="filtres-categories">
         <h2>Filtrer</h2>
+        <button
+          type="button"
+          className="bouton-tout-filtres"
+          onClick={basculerToutesCategories}
+        >
+          {toutesCategoriesActives ? 'Tout désélectionner' : 'Tout sélectionner'}
+        </button>
         {CATEGORIES.map((cat) => (
           <label className="filtre-case" key={cat.cle}>
             <input
@@ -264,6 +292,7 @@ export default function Vente({ benevole }) {
           produit={produitOuvert}
           onFermer={() => setProduitOuvert(null)}
           onValider={(choix) => ajouterAuPanier(produitOuvert, choix)}
+          onValiderEtPayer={(choix) => ajouterEtPayer(produitOuvert, choix)}
         />
       )}
 
