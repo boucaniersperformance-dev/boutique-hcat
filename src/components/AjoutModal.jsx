@@ -42,18 +42,37 @@ export default function AjoutModal({ produit, onValider, onFermer }) {
               {tailles.map((t) => {
                 const stock = stockPourTaille(t)
                 const rupture = stock !== null && stock <= 0
+                const bas = stock !== null && stock > 0 && stock <= SEUIL_STOCK_BAS
+                const classes = ['bouton-taille']
+                if (taille === t) classes.push('selectionne')
+                if (rupture) classes.push('epuise')
+                else if (bas) classes.push('stock-bas')
                 return (
                   <button
                     key={t}
-                    className={taille === t ? 'selectionne' : ''}
+                    type="button"
+                    className={classes.join(' ')}
                     onClick={() => setTaille(t)}
                   >
-                    {t}
-                    {rupture ? ' ⚠️' : ''}
+                    <span className="taille-label">{t}</span>
+                    {stock !== null && (
+                      <span className="taille-stock">
+                        {rupture ? 'Rupture' : stock}
+                      </span>
+                    )}
                   </button>
                 )
               })}
             </div>
+            {tailles.some((t) => {
+              const s = stockPourTaille(t)
+              return s !== null && s <= 0
+            }) && (
+              <p style={{ fontSize: '0.78rem', color: 'var(--texte-clair)', textAlign: 'center' }}>
+                Les tailles grisées sont annoncées à 0 en stock — encore
+                sélectionnables si tu sais qu'il en reste physiquement.
+              </p>
+            )}
           </>
         )}
 
