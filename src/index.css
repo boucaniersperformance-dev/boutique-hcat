@@ -1021,6 +1021,11 @@ table.tableau-admin input[type="text"] {
   color: #b91c1c;
 }
 
+.pastille.masque {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .bouton-icone {
   border: 1px solid var(--bordure);
   background: var(--fond);
