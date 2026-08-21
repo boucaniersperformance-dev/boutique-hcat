@@ -533,8 +533,13 @@ input {
   margin: 16px 0;
 }
 
-.choix-tailles button {
-  padding: 14px 0;
+.choix-tailles button,
+.bouton-taille {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 0 10px;
   border-radius: 10px;
   border: 2px solid var(--bordure);
   background: var(--fond);
@@ -542,10 +547,41 @@ input {
   font-size: 0.95rem;
 }
 
-.choix-tailles button.selectionne {
+.taille-label {
+  line-height: 1;
+}
+
+.taille-stock {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--vert);
+  color: white;
+}
+
+.bouton-taille.stock-bas .taille-stock {
+  background: var(--orange);
+}
+
+.bouton-taille.epuise {
+  opacity: 0.45;
+}
+
+.bouton-taille.epuise .taille-stock {
+  background: var(--rouge);
+  opacity: 1;
+}
+
+.choix-tailles button.selectionne,
+.bouton-taille.selectionne {
   border-color: var(--bleu);
   background: var(--bleu);
   color: white;
+}
+
+.bouton-taille.selectionne.epuise {
+  opacity: 1;
 }
 
 .quantite-zone {
