@@ -686,6 +686,38 @@ input {
   margin-top: 16px;
 }
 
+/* ---------- Recadrage photo ---------- */
+
+.recadrage-zone {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  margin: 12px auto;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--fond);
+  border: 1px solid var(--bordure);
+  touch-action: none;
+  cursor: grab;
+}
+
+.recadrage-zone:active {
+  cursor: grabbing;
+}
+
+.recadrage-controles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.recadrage-controles input[type='range'] {
+  flex: 1;
+}
+
 .modale-actions button {
   flex: 1;
 }
