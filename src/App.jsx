@@ -121,6 +121,11 @@ export default function App() {
           <Historique benevole={benevole} />
         )}
       </main>
+
+      <footer className="pied-page">
+        <img src="/logo-gb-kreation.png" alt="" className="logo-pied-page" />
+        Site créé par GB-Kréation
+      </footer>
     </div>
   )
 }
