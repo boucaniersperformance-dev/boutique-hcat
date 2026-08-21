@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { comparerTailles, formatEuros } from '../constants.js'
 import RecadrageModal from '../components/RecadrageModal.jsx'
@@ -15,9 +15,11 @@ export default function AdminProduits({ benevole }) {
   const [recadrage, setRecadrage] = useState(null) // { produit, fichier, cible: 'principale' | 'supplementaire' }
   const [corbeilleOuverte, setCorbeilleOuverte] = useState(false)
 
-  const [editionNomId, setEditionNomId] = useState(null)
+  const [ligneOuverte, setLigneOuverte] = useState(null)
   const [nomEdite, setNomEdite] = useState('')
-  const [renommageEnCours, setRenommageEnCours] = useState(false)
+  const [referenceEdite, setReferenceEdite] = useState('')
+  const [erreurEditionProduit, setErreurEditionProduit] = useState(null)
+  const [actionEditionEnCours, setActionEditionEnCours] = useState(false)
 
   const [nouveauNom, setNouveauNom] = useState('')
   const [nouveauPrix, setNouveauPrix] = useState('')
@@ -202,41 +204,61 @@ export default function AdminProduits({ benevole }) {
     charger()
   }
 
-  function ouvrirEditionNom(produit) {
-    if (editionNomId === produit.id) {
-      setEditionNomId(null)
+  function ouvrirEdition(produit) {
+    if (ligneOuverte === produit.id) {
+      setLigneOuverte(null)
       return
     }
-    setEditionNomId(produit.id)
+    setLigneOuverte(produit.id)
     setNomEdite(produit.nom)
+    setReferenceEdite(produit.reference || '')
+    setErreurEditionProduit(null)
   }
 
-  function annulerEditionNom() {
-    setEditionNomId(null)
+  function fermerEdition() {
+    setLigneOuverte(null)
   }
 
   async function renommerProduit(produit) {
     const nom = nomEdite.trim()
-    if (!nom || nom === produit.nom) {
-      setEditionNomId(null)
-      return
-    }
-    setRenommageEnCours(true)
+    if (!nom || nom === produit.nom) return
+    setActionEditionEnCours(true)
+    setErreurEditionProduit(null)
     const { error } = await supabase.rpc('renommer_produit', {
       p_benevole_id: benevole.id,
       p_produit_id: produit.id,
       p_nouveau_nom: nom,
     })
-    setRenommageEnCours(false)
+    setActionEditionEnCours(false)
     if (error) {
-      afficherMessage(produit.id, 'Erreur de renommage')
+      setErreurEditionProduit(error.message || 'Erreur lors du renommage.')
       return
     }
     setProduits((liste) =>
       liste.map((p) => (p.id === produit.id ? { ...p, nom } : p))
     )
-    setEditionNomId(null)
-    afficherMessage(produit.id, 'Renommé ✓')
+    afficherMessage(produit.id, 'Nom enregistré ✓')
+  }
+
+  async function enregistrerReference(produit) {
+    const reference = referenceEdite.trim()
+    if (reference === (produit.reference || '')) return
+    setActionEditionEnCours(true)
+    setErreurEditionProduit(null)
+    const { error } = await supabase.rpc('definir_reference_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+      p_reference: reference,
+    })
+    setActionEditionEnCours(false)
+    if (error) {
+      setErreurEditionProduit(error.message || "Erreur lors de l'enregistrement de la référence.")
+      return
+    }
+    setProduits((liste) =>
+      liste.map((p) => (p.id === produit.id ? { ...p, reference: reference || null } : p))
+    )
+    afficherMessage(produit.id, 'Référence enregistrée ✓')
   }
 
   async function mettreALaCorbeille(produit) {
@@ -339,7 +361,8 @@ export default function AdminProduits({ benevole }) {
           </thead>
           <tbody>
             {produitsActifs.map((produit) => (
-              <tr key={produit.id}>
+              <Fragment key={produit.id}>
+              <tr>
                 <td>
                   <div className="produit-image" style={{ width: 56, height: 56 }}>
                     {produit.photo_url ? (
@@ -391,44 +414,14 @@ export default function AdminProduits({ benevole }) {
                   </div>
                 </td>
                 <td>
-                  {editionNomId === produit.id ? (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <input
-                        type="text"
-                        value={nomEdite}
-                        autoFocus
-                        onChange={(e) => setNomEdite(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') renommerProduit(produit)
-                          if (e.key === 'Escape') annulerEditionNom()
-                        }}
-                      />
-                      <button
-                        className="bouton-icone"
-                        title="Enregistrer"
-                        disabled={renommageEnCours || !nomEdite.trim()}
-                        onClick={() => renommerProduit(produit)}
-                      >
-                        ✓
-                      </button>
-                      <button
-                        className="bouton-icone"
-                        title="Annuler"
-                        disabled={renommageEnCours}
-                        onClick={annulerEditionNom}
-                      >
-                        ✕
-                      </button>
+                  {produit.nom}
+                  <div className="reference-produit">
+                    Réf. : {produit.reference || '—'}
+                  </div>
+                  {!produit.prix && (
+                    <div>
+                      <span className="pastille a-definir">Prix à définir</span>
                     </div>
-                  ) : (
-                    <>
-                      {produit.nom}
-                      {!produit.prix && (
-                        <div>
-                          <span className="pastille a-definir">Prix à définir</span>
-                        </div>
-                      )}
-                    </>
                   )}
                 </td>
                 <td>
@@ -481,8 +474,8 @@ export default function AdminProduits({ benevole }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                       className="bouton-icone"
-                      title="Modifier le nom"
-                      onClick={() => ouvrirEditionNom(produit)}
+                      title="Modifier le nom / la référence"
+                      onClick={() => ouvrirEdition(produit)}
                     >
                       ✏️
                     </button>
@@ -497,6 +490,67 @@ export default function AdminProduits({ benevole }) {
                   </div>
                 </td>
               </tr>
+              {ligneOuverte === produit.id && (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="panneau-edition">
+                      <div className="champ">
+                        <label>Nom (affiché sur l'écran de vente)</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            type="text"
+                            value={nomEdite}
+                            onChange={(e) => setNomEdite(e.target.value)}
+                          />
+                          <button
+                            className="bouton-secondaire"
+                            disabled={
+                              actionEditionEnCours ||
+                              !nomEdite.trim() ||
+                              nomEdite.trim() === produit.nom
+                            }
+                            onClick={() => renommerProduit(produit)}
+                          >
+                            Enregistrer le nom
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="champ">
+                        <label>
+                          Référence (code interne pour le stock, ex : code
+                          fournisseur — non visible en vente)
+                        </label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            type="text"
+                            value={referenceEdite}
+                            placeholder="Ex : HCT-PULL-001"
+                            onChange={(e) => setReferenceEdite(e.target.value)}
+                          />
+                          <button
+                            className="bouton-secondaire"
+                            disabled={
+                              actionEditionEnCours ||
+                              referenceEdite.trim() === (produit.reference || '')
+                            }
+                            onClick={() => enregistrerReference(produit)}
+                          >
+                            Enregistrer la référence
+                          </button>
+                        </div>
+                      </div>
+
+                      {erreurEditionProduit && <p className="erreur">{erreurEditionProduit}</p>}
+
+                      <button className="bouton-secondaire" onClick={fermerEdition}>
+                        Fermer
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>
