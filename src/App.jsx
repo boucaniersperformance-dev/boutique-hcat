@@ -67,7 +67,10 @@ export default function App() {
   return (
     <div className="app">
       <header className="entete">
-        <div className="entete-titre">🏆 Boutique HCAT</div>
+        <div className="entete-titre">
+          <img src="/logo.png" alt="" className="logo-entete" />
+          Boutique HCAT
+        </div>
         <nav className="entete-nav">
           <button
             className={ecran === 'vente' ? 'actif' : ''}
@@ -121,3 +124,4 @@ export default function App() {
     </div>
   )
 }
+
