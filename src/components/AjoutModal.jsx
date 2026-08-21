@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { formatEuros, taillesPourJeu, SEUIL_STOCK_BAS } from '../constants.js'
+import { formatEuros, taillesPourJeu, SEUIL_STOCK_BAS, photosProduit } from '../constants.js'
 
 // Modale d'ajout au panier : demande la taille (si nécessaire) puis la quantité.
 export default function AjoutModal({ produit, onValider, onFermer }) {
@@ -7,6 +7,8 @@ export default function AjoutModal({ produit, onValider, onFermer }) {
     () => (produit.necessite_taille ? taillesPourJeu(produit.jeu_tailles) : []),
     [produit]
   )
+  const photos = useMemo(() => photosProduit(produit), [produit])
+  const [indexPhoto, setIndexPhoto] = useState(0)
   const [taille, setTaille] = useState(tailles.length === 1 ? tailles[0] : null)
   const [quantite, setQuantite] = useState(1)
 
@@ -32,6 +34,29 @@ export default function AjoutModal({ produit, onValider, onFermer }) {
         <p style={{ color: 'var(--texte-clair)' }}>
           {formatEuros(produit.prix)} / unité
         </p>
+
+        <div
+          className="produit-image galerie-photo"
+          onClick={() =>
+            photos.length > 1 &&
+            setIndexPhoto((i) => (i + 1) % photos.length)
+          }
+        >
+          {photos.length ? <img src={photos[indexPhoto]} alt={produit.nom} /> : '🛍️'}
+        </div>
+        {photos.length > 1 && (
+          <div className="galerie-points">
+            {photos.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`galerie-point${i === indexPhoto ? ' actif' : ''}`}
+                aria-label={`Photo ${i + 1}`}
+                onClick={() => setIndexPhoto(i)}
+              />
+            ))}
+          </div>
+        )}
 
         {produit.necessite_taille && (
           <>
@@ -128,3 +153,4 @@ export default function AjoutModal({ produit, onValider, onFermer }) {
     </div>
   )
 }
+
