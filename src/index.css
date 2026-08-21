@@ -288,50 +288,59 @@ input {
 
 .ecran-vente {
   display: grid;
-  grid-template-columns: 190px 1fr 360px;
+  grid-template-columns: 1fr 360px;
+  grid-template-areas:
+    'filtres filtres'
+    'produits panier';
   gap: 18px;
   align-items: start;
 }
 
 @media (max-width: 1100px) {
   .ecran-vente {
-    grid-template-columns: 160px 1fr 320px;
+    grid-template-columns: 1fr 320px;
   }
 }
 
 @media (max-width: 900px) {
   .ecran-vente {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      'filtres'
+      'produits'
+      'panier';
   }
 }
 
 .filtres-categories {
+  grid-area: filtres;
   background: var(--carte);
   border: 1px solid var(--bordure);
   border-radius: var(--rayon);
   padding: 14px;
-  position: sticky;
-  top: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .filtres-categories h2 {
   margin: 0;
   font-size: 1rem;
+  white-space: nowrap;
 }
 
 .filtre-case {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px;
+  padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--bordure);
   background: var(--fond);
   font-size: 0.85rem;
   font-weight: 600;
+  flex: 1 1 180px;
 }
 
 .filtre-case input {
@@ -347,22 +356,23 @@ input {
   font-size: 0.78rem;
 }
 
-@media (max-width: 900px) {
-  .filtres-categories {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
+.grille-produits {
+  grid-area: produits;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
 
-  .filtre-case {
-    flex: 1 1 auto;
+@media (max-width: 640px) {
+  .grille-produits {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-.grille-produits {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
+@media (max-width: 380px) {
+  .grille-produits {
+    grid-template-columns: 1fr;
+  }
 }
 
 .produit-bouton {
@@ -393,7 +403,7 @@ input {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  font-size: 2rem;
+  font-size: 3.6rem;
 }
 
 .produit-image img {
@@ -449,6 +459,7 @@ input {
 /* ---------- Panier ---------- */
 
 .panier {
+  grid-area: panier;
   background: var(--carte);
   border-radius: var(--rayon);
   border: 1px solid var(--bordure);
