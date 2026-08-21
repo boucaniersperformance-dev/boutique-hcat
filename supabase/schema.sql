@@ -495,6 +495,50 @@ begin
 end;
 $$;
 
+-- Supprime une vente (ex : vente de test), en exigeant le code PIN d'un
+-- responsable en confirmation — même si l'appli n'affiche ce bouton qu'aux
+-- responsables déjà connectés, cette double vérification évite une
+-- suppression accidentelle d'un simple clic. Le stock des articles vendus
+-- est restitué avant suppression.
+create or replace function supprimer_vente(
+  p_benevole_id uuid,
+  p_pin text,
+  p_vente_id uuid
+) returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_benevole benevoles%rowtype;
+  r record;
+begin
+  select * into v_benevole from benevoles b
+  where b.id = p_benevole_id and b.role = 'responsable' and b.actif = true;
+  if not found then
+    raise exception 'Action réservée aux responsables';
+  end if;
+
+  if v_benevole.pin_hash <> crypt(p_pin, v_benevole.pin_hash) then
+    raise exception 'Code PIN incorrect';
+  end if;
+
+  if not exists (select 1 from ventes where id = p_vente_id) then
+    raise exception 'Vente introuvable';
+  end if;
+
+  for r in
+    select produit_id, taille, quantite from ventes_lignes where vente_id = p_vente_id
+  loop
+    update variantes_produit
+    set stock_qty = stock_qty + r.quantite
+    where produit_id = r.produit_id and taille is not distinct from r.taille;
+  end loop;
+
+  delete from ventes where id = p_vente_id;
+end;
+$$;
+
 -- Historique des ventes sur une période (responsable uniquement).
 create or replace function lister_ventes(
   p_benevole_id uuid,
@@ -563,6 +607,7 @@ grant execute on function changer_statut_benevole(uuid, uuid, boolean) to authen
 grant execute on function changer_pin_benevole(uuid, uuid, text) to authenticated;
 grant execute on function changer_role_benevole(uuid, uuid, text) to authenticated;
 grant execute on function supprimer_benevole(uuid, uuid) to authenticated;
+grant execute on function supprimer_vente(uuid, text, uuid) to authenticated;
 grant execute on function lister_ventes(uuid, date, date) to authenticated;
 
 -- ---------------------------------------------------------------------

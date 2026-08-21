@@ -13,6 +13,11 @@ export default function Historique({ benevole }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
 
+  const [venteASupprimer, setVenteASupprimer] = useState(null)
+  const [pinConfirmation, setPinConfirmation] = useState('')
+  const [erreurSuppression, setErreurSuppression] = useState(null)
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false)
+
   const charger = useCallback(async () => {
     setChargement(true)
     setErreur(null)
@@ -64,6 +69,42 @@ export default function Historique({ benevole }) {
     URL.revokeObjectURL(url)
   }
 
+  function ouvrirSuppression(vente) {
+    setVenteASupprimer(vente)
+    setPinConfirmation('')
+    setErreurSuppression(null)
+  }
+
+  function fermerSuppression() {
+    if (suppressionEnCours) return
+    setVenteASupprimer(null)
+  }
+
+  async function confirmerSuppression() {
+    if (!/^\d{4}$/.test(pinConfirmation)) {
+      setErreurSuppression('Le code doit contenir exactement 4 chiffres.')
+      return
+    }
+    setSuppressionEnCours(true)
+    setErreurSuppression(null)
+    const { error } = await supabase.rpc('supprimer_vente', {
+      p_benevole_id: benevole.id,
+      p_pin: pinConfirmation,
+      p_vente_id: venteASupprimer.vente_id,
+    })
+    setSuppressionEnCours(false)
+    if (error) {
+      setErreurSuppression(
+        error.message === 'Code PIN incorrect'
+          ? 'Code PIN incorrect.'
+          : "La suppression a échoué."
+      )
+      return
+    }
+    setVenteASupprimer(null)
+    charger()
+  }
+
   return (
     <div className="bloc">
       <h2>Historique des ventes</h2>
@@ -102,6 +143,7 @@ export default function Historique({ benevole }) {
                   <th>Mode</th>
                   <th>Détail</th>
                   <th>Total</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -112,11 +154,20 @@ export default function Historique({ benevole }) {
                     <td>{v.mode_paiement === 'cb' ? 'CB' : 'Espèces'}</td>
                     <td style={{ whiteSpace: 'pre-line' }}>{v.detail}</td>
                     <td>{formatEuros(v.total)}</td>
+                    <td>
+                      <button
+                        className="bouton-icone"
+                        title="Supprimer cette vente"
+                        onClick={() => ouvrirSuppression(v)}
+                      >
+                        🗑️
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {ventes.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
                       Aucune vente sur cette période
                     </td>
                   </tr>
@@ -125,6 +176,54 @@ export default function Historique({ benevole }) {
             </table>
           </div>
         </>
+      )}
+
+      {venteASupprimer && (
+        <div className="fond-modale" onClick={fermerSuppression}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>Supprimer cette vente ?</h2>
+            <p>
+              {new Date(venteASupprimer.cree_le).toLocaleString('fr-FR')} —{' '}
+              {venteASupprimer.benevole_nom} — {formatEuros(venteASupprimer.total)}
+            </p>
+            <p style={{ whiteSpace: 'pre-line', color: 'var(--texte-clair)' }}>
+              {venteASupprimer.detail}
+            </p>
+            <p>
+              Cette action est irréversible (le stock des articles vendus sera
+              recrédité). Entre le code PIN d'un responsable pour confirmer.
+            </p>
+            <div className="champ">
+              <label>Code PIN responsable</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                autoFocus
+                value={pinConfirmation}
+                onChange={(e) => setPinConfirmation(e.target.value.replace(/\D/g, ''))}
+                placeholder="1234"
+              />
+            </div>
+            {erreurSuppression && <p className="erreur">{erreurSuppression}</p>}
+            <div className="modale-actions">
+              <button
+                className="bouton-secondaire"
+                onClick={fermerSuppression}
+                disabled={suppressionEnCours}
+              >
+                Annuler
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={confirmerSuppression}
+                disabled={suppressionEnCours || !/^\d{4}$/.test(pinConfirmation)}
+              >
+                {suppressionEnCours ? 'Suppression…' : 'Supprimer définitivement'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
