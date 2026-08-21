@@ -1,6 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { comparerTailles, formatEuros } from '../constants.js'
+import {
+  comparerTailles,
+  formatEuros,
+  CATEGORIES,
+  categorieProduit,
+  stockTotalProduit,
+} from '../constants.js'
 import RecadrageModal from '../components/RecadrageModal.jsx'
 
 const BUCKET_PHOTOS = 'produits-photos'
@@ -14,6 +20,11 @@ export default function AdminProduits({ benevole }) {
 
   const [recadrage, setRecadrage] = useState(null) // { produit, fichier, cible: 'principale' | 'supplementaire' }
   const [corbeilleOuverte, setCorbeilleOuverte] = useState(false)
+  const [archiveOuverte, setArchiveOuverte] = useState(false)
+
+  const [categoriesActives, setCategoriesActives] = useState(() =>
+    Object.fromEntries(CATEGORIES.map((c) => [c.cle, true]))
+  )
 
   const [ligneOuverte, setLigneOuverte] = useState(null)
   const [nomEdite, setNomEdite] = useState('')
@@ -45,14 +56,56 @@ export default function AdminProduits({ benevole }) {
     charger()
   }, [charger])
 
+  function parNomAlphabetique(a, b) {
+    return a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })
+  }
+
   const produitsActifs = useMemo(
-    () => produits.filter((p) => !p.supprime_le),
+    () =>
+      produits
+        .filter(
+          (p) =>
+            !p.supprime_le &&
+            !p.archive_le &&
+            categoriesActives[categorieProduit(p)]
+        )
+        .sort(parNomAlphabetique),
+    [produits, categoriesActives]
+  )
+  const produitsArchives = useMemo(
+    () =>
+      produits
+        .filter((p) => !p.supprime_le && p.archive_le)
+        .sort(parNomAlphabetique),
     [produits]
   )
   const produitsCorbeille = useMemo(
-    () => produits.filter((p) => p.supprime_le),
+    () => produits.filter((p) => p.supprime_le).sort(parNomAlphabetique),
     [produits]
   )
+
+  const comptesParCategorie = useMemo(() => {
+    const compte = { adulte: 0, enfant: 0, goodies: 0 }
+    produits
+      .filter((p) => !p.supprime_le && !p.archive_le)
+      .forEach((p) => {
+        compte[categorieProduit(p)] += 1
+      })
+    return compte
+  }, [produits])
+
+  const toutesCategoriesActives = CATEGORIES.every((c) => categoriesActives[c.cle])
+
+  function basculerCategorie(cle) {
+    setCategoriesActives((etat) => ({ ...etat, [cle]: !etat[cle] }))
+  }
+
+  function basculerToutesCategories() {
+    const nouvelEtat = !toutesCategoriesActives
+    setCategoriesActives(
+      Object.fromEntries(CATEGORIES.map((c) => [c.cle, nouvelEtat]))
+    )
+  }
 
   function afficherMessage(id, texte) {
     setMessages((m) => ({ ...m, [id]: texte }))
@@ -282,6 +335,27 @@ export default function AdminProduits({ benevole }) {
     charger()
   }
 
+  async function archiverProduit(produit) {
+    const { error } = await supabase.rpc('archiver_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+    })
+    if (error) {
+      afficherMessage(produit.id, 'Erreur')
+      return
+    }
+    charger()
+  }
+
+  async function desarchiverProduit(produit) {
+    const { error } = await supabase.rpc('desarchiver_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+    })
+    if (error) return
+    charger()
+  }
+
   async function supprimerDefinitivement(produit) {
     if (
       !window.confirm(
@@ -345,8 +419,31 @@ export default function AdminProduits({ benevole }) {
         <h2>Gestion des produits</h2>
         <p style={{ color: 'var(--texte-clair)' }}>
           Les prix, le stock et les photos se mettent à jour immédiatement pour
-          tous les bénévoles.
+          tous les bénévoles. Triés par ordre alphabétique.
         </p>
+
+        <aside className="filtres-categories" style={{ marginBottom: 16 }}>
+          <h2>Filtrer</h2>
+          <button
+            type="button"
+            className="bouton-tout-filtres"
+            onClick={basculerToutesCategories}
+          >
+            {toutesCategoriesActives ? 'Tout désélectionner' : 'Tout sélectionner'}
+          </button>
+          {CATEGORIES.map((cat) => (
+            <label className="filtre-case" key={cat.cle}>
+              <input
+                type="checkbox"
+                checked={categoriesActives[cat.cle]}
+                onChange={() => basculerCategorie(cat.cle)}
+              />
+              {cat.label}
+              <span className="compte">{comptesParCategorie[cat.cle]}</span>
+            </label>
+          ))}
+        </aside>
+
         <div style={{ overflowX: 'auto' }}>
         <table className="tableau-admin">
           <thead>
@@ -423,6 +520,16 @@ export default function AdminProduits({ benevole }) {
                       <span className="pastille a-definir">Prix à définir</span>
                     </div>
                   )}
+                  {(() => {
+                    const stock = stockTotalProduit(produit)
+                    return stock !== null && stock <= 0 ? (
+                      <div>
+                        <span className="pastille masque">
+                          Masqué en vente (stock à 0)
+                        </span>
+                      </div>
+                    ) : null
+                  })()}
                 </td>
                 <td>
                   <input
@@ -478,6 +585,13 @@ export default function AdminProduits({ benevole }) {
                       onClick={() => ouvrirEdition(produit)}
                     >
                       ✏️
+                    </button>
+                    <button
+                      className="bouton-icone"
+                      title="Archiver (on ne le commande plus pour l'instant, mais on garde sa fiche)"
+                      onClick={() => archiverProduit(produit)}
+                    >
+                      📦
                     </button>
                     <button
                       className="bouton-icone"
@@ -555,6 +669,58 @@ export default function AdminProduits({ benevole }) {
           </tbody>
         </table>
       </div>
+      </div>
+
+      <div className="bloc">
+        <button
+          className="bouton-secondaire"
+          onClick={() => setArchiveOuverte((v) => !v)}
+        >
+          📦 Archivés ({produitsArchives.length}){' '}
+          {archiveOuverte ? '▲' : '▼'}
+        </button>
+        {archiveOuverte && (
+          <div style={{ overflowX: 'auto', marginTop: 12 }}>
+            {produitsArchives.length === 0 ? (
+              <p style={{ color: 'var(--texte-clair)' }}>Aucun produit archivé.</p>
+            ) : (
+              <table className="tableau-admin">
+                <thead>
+                  <tr>
+                    <th>Produit</th>
+                    <th>Prix (€)</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {produitsArchives.map((produit) => (
+                    <tr key={produit.id}>
+                      <td>{produit.nom}</td>
+                      <td>{formatEuros(produit.prix)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            className="bouton-secondaire"
+                            onClick={() => desarchiverProduit(produit)}
+                          >
+                            ♻️ Désarchiver
+                          </button>
+                          <button
+                            className="bouton-icone"
+                            title="Mettre à la corbeille"
+                            onClick={() => mettreALaCorbeille(produit)}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bloc">
