@@ -15,6 +15,10 @@ export default function AdminProduits({ benevole }) {
   const [recadrage, setRecadrage] = useState(null) // { produit, fichier, cible: 'principale' | 'supplementaire' }
   const [corbeilleOuverte, setCorbeilleOuverte] = useState(false)
 
+  const [editionNomId, setEditionNomId] = useState(null)
+  const [nomEdite, setNomEdite] = useState('')
+  const [renommageEnCours, setRenommageEnCours] = useState(false)
+
   const [nouveauNom, setNouveauNom] = useState('')
   const [nouveauPrix, setNouveauPrix] = useState('')
   const [nouveauType, setNouveauType] = useState('sans_taille')
@@ -198,6 +202,43 @@ export default function AdminProduits({ benevole }) {
     charger()
   }
 
+  function ouvrirEditionNom(produit) {
+    if (editionNomId === produit.id) {
+      setEditionNomId(null)
+      return
+    }
+    setEditionNomId(produit.id)
+    setNomEdite(produit.nom)
+  }
+
+  function annulerEditionNom() {
+    setEditionNomId(null)
+  }
+
+  async function renommerProduit(produit) {
+    const nom = nomEdite.trim()
+    if (!nom || nom === produit.nom) {
+      setEditionNomId(null)
+      return
+    }
+    setRenommageEnCours(true)
+    const { error } = await supabase.rpc('renommer_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+      p_nouveau_nom: nom,
+    })
+    setRenommageEnCours(false)
+    if (error) {
+      afficherMessage(produit.id, 'Erreur de renommage')
+      return
+    }
+    setProduits((liste) =>
+      liste.map((p) => (p.id === produit.id ? { ...p, nom } : p))
+    )
+    setEditionNomId(null)
+    afficherMessage(produit.id, 'Renommé ✓')
+  }
+
   async function mettreALaCorbeille(produit) {
     const { error } = await supabase.rpc('supprimer_produit', {
       p_benevole_id: benevole.id,
@@ -350,11 +391,44 @@ export default function AdminProduits({ benevole }) {
                   </div>
                 </td>
                 <td>
-                  {produit.nom}
-                  {!produit.prix && (
-                    <div>
-                      <span className="pastille a-definir">Prix à définir</span>
+                  {editionNomId === produit.id ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={nomEdite}
+                        autoFocus
+                        onChange={(e) => setNomEdite(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') renommerProduit(produit)
+                          if (e.key === 'Escape') annulerEditionNom()
+                        }}
+                      />
+                      <button
+                        className="bouton-icone"
+                        title="Enregistrer"
+                        disabled={renommageEnCours || !nomEdite.trim()}
+                        onClick={() => renommerProduit(produit)}
+                      >
+                        ✓
+                      </button>
+                      <button
+                        className="bouton-icone"
+                        title="Annuler"
+                        disabled={renommageEnCours}
+                        onClick={annulerEditionNom}
+                      >
+                        ✕
+                      </button>
                     </div>
+                  ) : (
+                    <>
+                      {produit.nom}
+                      {!produit.prix && (
+                        <div>
+                          <span className="pastille a-definir">Prix à définir</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </td>
                 <td>
@@ -405,6 +479,13 @@ export default function AdminProduits({ benevole }) {
                 </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      className="bouton-icone"
+                      title="Modifier le nom"
+                      onClick={() => ouvrirEditionNom(produit)}
+                    >
+                      ✏️
+                    </button>
                     <button
                       className="bouton-icone"
                       title="Mettre à la corbeille"
