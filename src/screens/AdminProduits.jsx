@@ -421,6 +421,12 @@ export default function AdminProduits({ benevole }) {
           Les prix, le stock et les photos se mettent à jour immédiatement pour
           tous les bénévoles. Triés par ordre alphabétique.
         </p>
+        <p style={{ color: 'var(--texte-clair)' }}>
+          Décoche <strong>En vente</strong> sur un article pour qu'il
+          n'apparaisse plus dans l'écran de vente — même s'il reste en
+          stock — sans avoir à l'archiver ni le supprimer. Coche-la à
+          nouveau pour le remettre en vente instantanément.
+        </p>
 
         <aside className="filtres-categories" style={{ marginBottom: 16 }}>
           <h2>Filtrer</h2>
@@ -451,7 +457,9 @@ export default function AdminProduits({ benevole }) {
               <th>Photo</th>
               <th>Produit</th>
               <th>Prix (€)</th>
-              <th>Actif</th>
+              <th title="Coché = visible dans l'écran de vente. Décoché = masqué, même si du stock reste disponible.">
+                En vente
+              </th>
               <th>Stock</th>
               <th>Actions</th>
             </tr>
@@ -548,6 +556,12 @@ export default function AdminProduits({ benevole }) {
                 <td>
                   <input
                     type="checkbox"
+                    className="case-en-vente"
+                    title={
+                      produit.actif
+                        ? 'Visible en vente — décocher pour le masquer'
+                        : 'Masqué en vente — cocher pour le rendre visible'
+                    }
                     checked={produit.actif}
                     onChange={(e) =>
                       sauvegarderProduit(produit, { actif: e.target.checked })
