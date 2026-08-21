@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { formatEuros } from '../constants.js'
+import { comparerTailles, formatEuros } from '../constants.js'
 import RecadrageModal from '../components/RecadrageModal.jsx'
 
 const BUCKET_PHOTOS = 'produits-photos'
@@ -13,6 +13,7 @@ export default function AdminProduits({ benevole }) {
   const [enTransfert, setEnTransfert] = useState({})
 
   const [recadrage, setRecadrage] = useState(null) // { produit, fichier }
+  const [corbeilleOuverte, setCorbeilleOuverte] = useState(false)
 
   const [nouveauNom, setNouveauNom] = useState('')
   const [nouveauPrix, setNouveauPrix] = useState('')
@@ -37,6 +38,15 @@ export default function AdminProduits({ benevole }) {
   useEffect(() => {
     charger()
   }, [charger])
+
+  const produitsActifs = useMemo(
+    () => produits.filter((p) => !p.supprime_le),
+    [produits]
+  )
+  const produitsCorbeille = useMemo(
+    () => produits.filter((p) => p.supprime_le),
+    [produits]
+  )
 
   function afficherMessage(id, texte) {
     setMessages((m) => ({ ...m, [id]: texte }))
@@ -147,6 +157,43 @@ export default function AdminProduits({ benevole }) {
     charger()
   }
 
+  async function mettreALaCorbeille(produit) {
+    const { error } = await supabase.rpc('supprimer_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+    })
+    if (error) {
+      afficherMessage(produit.id, 'Erreur')
+      return
+    }
+    charger()
+  }
+
+  async function restaurerProduit(produit) {
+    const { error } = await supabase.rpc('restaurer_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+    })
+    if (error) return
+    charger()
+  }
+
+  async function supprimerDefinitivement(produit) {
+    if (
+      !window.confirm(
+        `Supprimer définitivement "${produit.nom}" ? Cette action est irréversible (son historique de ventes est conservé, mais la fiche produit disparaît).`
+      )
+    ) {
+      return
+    }
+    const { error } = await supabase.rpc('supprimer_produit_definitivement', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+    })
+    if (error) return
+    charger()
+  }
+
   if (chargement) return <div className="chargement">Chargement…</div>
   if (erreur) return <p className="erreur">{erreur}</p>
 
@@ -205,11 +252,11 @@ export default function AdminProduits({ benevole }) {
               <th>Prix (€)</th>
               <th>Actif</th>
               <th>Stock</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {produits.map((produit) => (
+            {produitsActifs.map((produit) => (
               <tr key={produit.id}>
                 <td>
                   <div className="produit-image" style={{ width: 56, height: 56 }}>
@@ -264,7 +311,7 @@ export default function AdminProduits({ benevole }) {
                 <td>
                   {(produit.variantes_produit || [])
                     .slice()
-                    .sort((a, b) => (a.taille || '').localeCompare(b.taille || ''))
+                    .sort((a, b) => comparerTailles(a.taille, b.taille))
                     .map((variante) => (
                       <div
                         key={variante.id}
@@ -284,12 +331,75 @@ export default function AdminProduits({ benevole }) {
                       </div>
                     ))}
                 </td>
-                <td>{messages[produit.id]}</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      className="bouton-icone"
+                      title="Mettre à la corbeille"
+                      onClick={() => mettreALaCorbeille(produit)}
+                    >
+                      🗑️
+                    </button>
+                    {messages[produit.id]}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      </div>
+
+      <div className="bloc">
+        <button
+          className="bouton-secondaire"
+          onClick={() => setCorbeilleOuverte((v) => !v)}
+        >
+          🗑️ Corbeille ({produitsCorbeille.length}){' '}
+          {corbeilleOuverte ? '▲' : '▼'}
+        </button>
+        {corbeilleOuverte && (
+          <div style={{ overflowX: 'auto', marginTop: 12 }}>
+            {produitsCorbeille.length === 0 ? (
+              <p style={{ color: 'var(--texte-clair)' }}>La corbeille est vide.</p>
+            ) : (
+              <table className="tableau-admin">
+                <thead>
+                  <tr>
+                    <th>Produit</th>
+                    <th>Prix (€)</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {produitsCorbeille.map((produit) => (
+                    <tr key={produit.id}>
+                      <td>{produit.nom}</td>
+                      <td>{formatEuros(produit.prix)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            className="bouton-secondaire"
+                            onClick={() => restaurerProduit(produit)}
+                          >
+                            ♻️ Restaurer
+                          </button>
+                          <button
+                            className="bouton-icone"
+                            title="Supprimer définitivement"
+                            onClick={() => supprimerDefinitivement(produit)}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
 
       {recadrage && (
