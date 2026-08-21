@@ -47,3 +47,13 @@ export function categorieProduit(produit) {
   if (produit.necessite_taille && produit.jeu_tailles === 'enfant') return 'enfant'
   return 'goodies'
 }
+
+// Photo principale (produits.photo_url) + photos supplémentaires (ex :
+// face/dos, table produit_photos), dans l'ordre d'ajout.
+export function photosProduit(produit) {
+  const supplementaires = (produit.produit_photos || [])
+    .slice()
+    .sort((a, b) => a.ordre - b.ordre)
+    .map((p) => p.url)
+  return [produit.photo_url, ...supplementaires].filter(Boolean)
+}
