@@ -330,6 +330,17 @@ input {
   white-space: nowrap;
 }
 
+.bouton-tout-filtres {
+  border: 1px solid var(--bordure);
+  background: var(--fond);
+  color: var(--bleu);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
 .filtre-case {
   display: flex;
   align-items: center;
@@ -607,6 +618,70 @@ input {
   margin-top: 0;
 }
 
+/* Modale de choix d'article (AjoutModal) : plus large et sur deux
+   colonnes, pour tenir sans avoir à défiler même à 100% de zoom. */
+.modale-produit {
+  max-width: 640px;
+}
+
+.ajout-corps {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+}
+
+.ajout-photo-col {
+  flex: 0 0 220px;
+}
+
+.ajout-choix-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.ajout-choix-col .choix-tailles {
+  margin-top: 8px;
+}
+
+@media (max-width: 620px) {
+  .ajout-corps {
+    flex-direction: column;
+  }
+  .ajout-photo-col {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
+.galerie-photo {
+  max-width: 220px;
+  margin: 4px auto 0;
+}
+
+.galerie-photo img {
+  cursor: pointer;
+}
+
+.galerie-points {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
+.galerie-point {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: var(--bordure);
+}
+
+.galerie-point.actif {
+  background: var(--bleu);
+}
+
 .choix-tailles {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -695,6 +770,23 @@ input {
   display: flex;
   gap: 10px;
   margin-top: 16px;
+}
+
+.bouton-payer-maintenant {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--vert);
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.bouton-payer-maintenant:disabled {
+  opacity: 0.5;
 }
 
 /* ---------- Recadrage photo ---------- */
@@ -837,6 +929,63 @@ table.tableau-admin input[type="text"] {
   padding: 8px;
   border-radius: 8px;
   border: 1px solid var(--bordure);
+}
+
+.photos-supp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  max-width: 90px;
+}
+
+.photo-supp-vignette {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+}
+
+.photo-supp-vignette img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-supp-vignette button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  border: none;
+  border-radius: 0 0 0 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 0.75rem;
+  padding: 0;
+}
+
+.photo-supp-ajout {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px dashed var(--bordure);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  color: var(--texte-clair);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.photo-supp-ajout input {
+  display: none;
 }
 
 .pastille {
