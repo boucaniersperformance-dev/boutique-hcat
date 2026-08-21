@@ -12,7 +12,7 @@ export default function AdminProduits({ benevole }) {
   const [messages, setMessages] = useState({})
   const [enTransfert, setEnTransfert] = useState({})
 
-  const [recadrage, setRecadrage] = useState(null) // { produit, fichier }
+  const [recadrage, setRecadrage] = useState(null) // { produit, fichier, cible: 'principale' | 'supplementaire' }
   const [corbeilleOuverte, setCorbeilleOuverte] = useState(false)
 
   const [nouveauNom, setNouveauNom] = useState('')
@@ -25,7 +25,7 @@ export default function AdminProduits({ benevole }) {
     setErreur(null)
     const { data, error } = await supabase
       .from('produits')
-      .select('*, variantes_produit(*)')
+      .select('*, variantes_produit(*), produit_photos(*)')
       .order('ordre', { ascending: true })
     if (error) {
       setErreur('Impossible de charger les produits.')
@@ -122,13 +122,54 @@ export default function AdminProduits({ benevole }) {
   }
 
   async function confirmerRecadrage(blob) {
-    const { produit } = recadrage
+    const { produit, cible } = recadrage
     setRecadrage(null)
-    await changerPhoto(produit, blob)
+    if (cible === 'supplementaire') {
+      await ajouterPhotoSupplementaire(produit, blob)
+    } else {
+      await changerPhoto(produit, blob)
+    }
   }
 
   function annulerRecadrage() {
     setRecadrage(null)
+  }
+
+  async function ajouterPhotoSupplementaire(produit, blob) {
+    setEnTransfert((t) => ({ ...t, [produit.id]: true }))
+    const chemin = `${produit.id}-extra-${Date.now()}.jpg`
+    const { error: erreurUpload } = await supabase.storage
+      .from(BUCKET_PHOTOS)
+      .upload(chemin, blob, { upsert: true, contentType: 'image/jpeg' })
+    if (erreurUpload) {
+      setEnTransfert((t) => ({ ...t, [produit.id]: false }))
+      afficherMessage(produit.id, "Échec de l'envoi de la photo")
+      return
+    }
+    const { data: urlPublique } = supabase.storage
+      .from(BUCKET_PHOTOS)
+      .getPublicUrl(chemin)
+    const { error } = await supabase.rpc('ajouter_photo_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+      p_url: urlPublique.publicUrl,
+    })
+    setEnTransfert((t) => ({ ...t, [produit.id]: false }))
+    if (error) {
+      afficherMessage(produit.id, "Échec de l'ajout de la photo")
+      return
+    }
+    afficherMessage(produit.id, 'Photo ajoutée ✓')
+    charger()
+  }
+
+  async function supprimerPhotoSupplementaire(photo) {
+    const { error } = await supabase.rpc('supprimer_photo_produit', {
+      p_benevole_id: benevole.id,
+      p_photo_id: photo.id,
+    })
+    if (error) return
+    charger()
   }
 
   async function creerProduit(e) {
@@ -272,10 +313,41 @@ export default function AdminProduits({ benevole }) {
                     disabled={!!enTransfert[produit.id]}
                     onChange={(e) => {
                       const fichier = e.target.files?.[0]
-                      if (fichier) setRecadrage({ produit, fichier })
+                      if (fichier) setRecadrage({ produit, fichier, cible: 'principale' })
                       e.target.value = ''
                     }}
                   />
+
+                  <div className="photos-supp">
+                    {(produit.produit_photos || [])
+                      .slice()
+                      .sort((a, b) => a.ordre - b.ordre)
+                      .map((photo) => (
+                        <div className="photo-supp-vignette" key={photo.id}>
+                          <img src={photo.url} alt="" />
+                          <button
+                            type="button"
+                            title="Retirer cette photo"
+                            onClick={() => supprimerPhotoSupplementaire(photo)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    <label className="photo-supp-ajout" title="Ajouter une photo (ex : dos)">
+                      +
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={!!enTransfert[produit.id]}
+                        onChange={(e) => {
+                          const fichier = e.target.files?.[0]
+                          if (fichier) setRecadrage({ produit, fichier, cible: 'supplementaire' })
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                  </div>
                 </td>
                 <td>
                   {produit.nom}
