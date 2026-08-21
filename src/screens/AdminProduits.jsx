@@ -11,6 +11,12 @@ export default function AdminProduits({ benevole }) {
   const [messages, setMessages] = useState({})
   const [enTransfert, setEnTransfert] = useState({})
 
+  const [nouveauNom, setNouveauNom] = useState('')
+  const [nouveauPrix, setNouveauPrix] = useState('')
+  const [nouveauType, setNouveauType] = useState('sans_taille')
+  const [creationEnCours, setCreationEnCours] = useState(false)
+  const [erreurCreation, setErreurCreation] = useState(null)
+
   const charger = useCallback(async () => {
     setErreur(null)
     const { data, error } = await supabase
@@ -100,17 +106,82 @@ export default function AdminProduits({ benevole }) {
     setEnTransfert((t) => ({ ...t, [produit.id]: false }))
   }
 
+  async function creerProduit(e) {
+    e.preventDefault()
+    setErreurCreation(null)
+    if (!nouveauNom.trim()) {
+      setErreurCreation('Le nom est obligatoire.')
+      return
+    }
+    setCreationEnCours(true)
+    const { error } = await supabase.rpc('ajouter_produit', {
+      p_benevole_id: benevole.id,
+      p_nom: nouveauNom.trim(),
+      p_prix: parseFloat(nouveauPrix) || 0,
+      p_necessite_taille: nouveauType !== 'sans_taille',
+      p_jeu_tailles: nouveauType === 'sans_taille' ? null : nouveauType,
+    })
+    setCreationEnCours(false)
+    if (error) {
+      setErreurCreation("Erreur lors de la création du produit.")
+      return
+    }
+    setNouveauNom('')
+    setNouveauPrix('')
+    setNouveauType('sans_taille')
+    charger()
+  }
+
   if (chargement) return <div className="chargement">Chargement…</div>
   if (erreur) return <p className="erreur">{erreur}</p>
 
   return (
-    <div className="bloc">
-      <h2>Gestion des produits</h2>
-      <p style={{ color: 'var(--texte-clair)' }}>
-        Les prix, le stock et les photos se mettent à jour immédiatement pour
-        tous les bénévoles.
-      </p>
-      <div style={{ overflowX: 'auto' }}>
+    <>
+      <div className="bloc">
+        <h2>Nouveau produit</h2>
+        <form className="formulaire-inline" onSubmit={creerProduit}>
+          <div className="champ">
+            <label>Nom</label>
+            <input
+              type="text"
+              value={nouveauNom}
+              onChange={(e) => setNouveauNom(e.target.value)}
+              placeholder="Ex : Débardeur running"
+            />
+          </div>
+          <div className="champ">
+            <label>Prix (€)</label>
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              value={nouveauPrix}
+              onChange={(e) => setNouveauPrix(e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+          <div className="champ">
+            <label>Type</label>
+            <select value={nouveauType} onChange={(e) => setNouveauType(e.target.value)}>
+              <option value="sans_taille">Sans taille (goodie)</option>
+              <option value="adulte">Vêtement adulte (S à XXL)</option>
+              <option value="enfant">Vêtement enfant (par âge)</option>
+            </select>
+          </div>
+          <button className="bouton-principal" type="submit" disabled={creationEnCours}>
+            {creationEnCours ? 'Création…' : '+ Ajouter ce produit'}
+          </button>
+        </form>
+        {erreurCreation && <p className="erreur">{erreurCreation}</p>}
+      </div>
+
+      <div className="bloc">
+        <h2>Gestion des produits</h2>
+        <p style={{ color: 'var(--texte-clair)' }}>
+          Les prix, le stock et les photos se mettent à jour immédiatement pour
+          tous les bénévoles.
+        </p>
+        <div style={{ overflowX: 'auto' }}>
         <table className="tableau-admin">
           <thead>
             <tr>
@@ -204,6 +275,8 @@ export default function AdminProduits({ benevole }) {
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
+
