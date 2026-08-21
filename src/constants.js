@@ -10,6 +10,19 @@ export function taillesPourJeu(jeuTailles) {
   return []
 }
 
+// Ordre logique des tailles (XS→XXL, puis les tranches d'âge), pour trier
+// les lignes de stock au lieu de l'ordre alphabétique par défaut.
+const ORDRE_TAILLES = [...TAILLES_ADULTE, ...TAILLES_ENFANT]
+
+export function comparerTailles(a, b) {
+  const ia = ORDRE_TAILLES.indexOf(a || '')
+  const ib = ORDRE_TAILLES.indexOf(b || '')
+  if (ia === -1 && ib === -1) return (a || '').localeCompare(b || '')
+  if (ia === -1) return 1
+  if (ib === -1) return -1
+  return ia - ib
+}
+
 export function formatEuros(montant) {
   const nombre = Number(montant) || 0
   return nombre.toLocaleString('fr-FR', {
