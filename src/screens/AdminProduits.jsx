@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatEuros } from '../constants.js'
+import RecadrageModal from '../components/RecadrageModal.jsx'
 
 const BUCKET_PHOTOS = 'produits-photos'
 
@@ -10,6 +11,8 @@ export default function AdminProduits({ benevole }) {
   const [erreur, setErreur] = useState(null)
   const [messages, setMessages] = useState({})
   const [enTransfert, setEnTransfert] = useState({})
+
+  const [recadrage, setRecadrage] = useState(null) // { produit, fichier }
 
   const [nouveauNom, setNouveauNom] = useState('')
   const [nouveauPrix, setNouveauPrix] = useState('')
@@ -87,13 +90,15 @@ export default function AdminProduits({ benevole }) {
     afficherMessage(produitId, 'Stock mis à jour ✓')
   }
 
-  async function changerPhoto(produit, fichier) {
+  // `blob` est toujours l'image déjà recadrée et compressée en JPEG carré
+  // par la modale de recadrage (voir RecadrageModal) : l'extension et le
+  // type sont donc fixes, quelle que soit la photo d'origine envoyée.
+  async function changerPhoto(produit, blob) {
     setEnTransfert((t) => ({ ...t, [produit.id]: true }))
-    const extension = fichier.name.split('.').pop()
-    const chemin = `${produit.id}-${Date.now()}.${extension}`
+    const chemin = `${produit.id}-${Date.now()}.jpg`
     const { error: erreurUpload } = await supabase.storage
       .from(BUCKET_PHOTOS)
-      .upload(chemin, fichier, { upsert: true })
+      .upload(chemin, blob, { upsert: true, contentType: 'image/jpeg' })
     if (erreurUpload) {
       setEnTransfert((t) => ({ ...t, [produit.id]: false }))
       afficherMessage(produit.id, "Échec de l'envoi de la photo")
@@ -104,6 +109,16 @@ export default function AdminProduits({ benevole }) {
       .getPublicUrl(chemin)
     await sauvegarderProduit(produit, { photo_url: urlPublique.publicUrl })
     setEnTransfert((t) => ({ ...t, [produit.id]: false }))
+  }
+
+  async function confirmerRecadrage(blob) {
+    const { produit } = recadrage
+    setRecadrage(null)
+    await changerPhoto(produit, blob)
+  }
+
+  function annulerRecadrage() {
+    setRecadrage(null)
   }
 
   async function creerProduit(e) {
@@ -210,7 +225,7 @@ export default function AdminProduits({ benevole }) {
                     disabled={!!enTransfert[produit.id]}
                     onChange={(e) => {
                       const fichier = e.target.files?.[0]
-                      if (fichier) changerPhoto(produit, fichier)
+                      if (fichier) setRecadrage({ produit, fichier })
                       e.target.value = ''
                     }}
                   />
@@ -276,6 +291,14 @@ export default function AdminProduits({ benevole }) {
         </table>
       </div>
       </div>
+
+      {recadrage && (
+        <RecadrageModal
+          fichier={recadrage.fichier}
+          onValider={confirmerRecadrage}
+          onAnnuler={annulerRecadrage}
+        />
+      )}
     </>
   )
 }
