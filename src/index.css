@@ -142,12 +142,42 @@ input {
 /* ---------- Écran de connexion ---------- */
 
 .login-ecran {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(160deg, var(--bleu), var(--bleu-clair));
   padding: 20px;
+}
+
+/* ---------- Pied de page (crédit GB-Kréation) ---------- */
+
+.pied-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px 18px;
+  font-size: 0.78rem;
+  color: var(--texte-clair);
+}
+
+.logo-pied-page {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pied-page-connexion {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  padding: 0 16px;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .login-carte {
