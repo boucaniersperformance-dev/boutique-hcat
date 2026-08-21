@@ -12,6 +12,7 @@ export default function AdminBenevoles({ benevole }) {
   const [erreurCreation, setErreurCreation] = useState(null)
 
   const [ligneOuverte, setLigneOuverte] = useState(null)
+  const [nomEdite, setNomEdite] = useState('')
   const [roleEdite, setRoleEdite] = useState('benevole')
   const [nouveauPinEdite, setNouveauPinEdite] = useState('')
   const [erreurEdition, setErreurEdition] = useState(null)
@@ -73,9 +74,28 @@ export default function AdminBenevoles({ benevole }) {
       return
     }
     setLigneOuverte(cible.id)
+    setNomEdite(cible.nom)
     setRoleEdite(cible.role)
     setNouveauPinEdite('')
     setErreurEdition(null)
+  }
+
+  async function enregistrerNom(cible) {
+    const nom = nomEdite.trim()
+    if (!nom || nom === cible.nom) return
+    setActionEnCours(true)
+    setErreurEdition(null)
+    const { error } = await supabase.rpc('changer_nom_benevole', {
+      p_benevole_id: benevole.id,
+      p_cible_id: cible.id,
+      p_nouveau_nom: nom,
+    })
+    setActionEnCours(false)
+    if (error) {
+      setErreurEdition(error.message || 'Erreur lors du changement de nom.')
+      return
+    }
+    charger()
   }
 
   async function enregistrerRole(cible) {
@@ -238,6 +258,29 @@ export default function AdminBenevoles({ benevole }) {
                     <td colSpan={4}>
                       <div className="panneau-edition">
                         <div className="champ">
+                          <label>Nom</label>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input
+                              type="text"
+                              value={nomEdite}
+                              onChange={(e) => setNomEdite(e.target.value)}
+                              placeholder="Prénom Nom"
+                            />
+                            <button
+                              className="bouton-secondaire"
+                              disabled={
+                                actionEnCours ||
+                                !nomEdite.trim() ||
+                                nomEdite.trim() === b.nom
+                              }
+                              onClick={() => enregistrerNom(b)}
+                            >
+                              Enregistrer le nom
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="champ">
                           <label>Rôle</label>
                           <div style={{ display: 'flex', gap: 8 }}>
                             <select
@@ -305,3 +348,4 @@ export default function AdminBenevoles({ benevole }) {
     </>
   )
 }
+
