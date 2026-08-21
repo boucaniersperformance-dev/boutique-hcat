@@ -1057,6 +1057,13 @@ table.tableau-admin .panneau-edition input[type="text"] {
   color: var(--texte-clair);
 }
 
+.case-en-vente {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  accent-color: var(--vert);
+}
+
 .filtre-barre {
   display: flex;
   gap: 10px;
