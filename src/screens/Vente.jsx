@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { formatEuros, SEUIL_STOCK_BAS, CATEGORIES, categorieProduit } from '../constants.js'
+import {
+  formatEuros,
+  SEUIL_STOCK_BAS,
+  CATEGORIES,
+  categorieProduit,
+  photosProduit,
+} from '../constants.js'
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
 
@@ -15,6 +21,8 @@ function stockTotalProduit(produit) {
   return connues.reduce((somme, v) => somme + v.stock_qty, 0)
 }
 
+const INTERVALLE_CARROUSEL_MS = 3000
+
 export default function Vente({ benevole }) {
   const [produits, setProduits] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -28,12 +36,20 @@ export default function Vente({ benevole }) {
   const [enregistrement, setEnregistrement] = useState(false)
   const [succes, setSucces] = useState(null)
   const [erreurVente, setErreurVente] = useState(null)
+  const [tickCarrousel, setTickCarrousel] = useState(0)
+
+  // Un seul minuteur partagé par toutes les vignettes (plutôt qu'un par
+  // produit) fait avancer le carrousel des photos face/dos toutes les 3s.
+  useEffect(() => {
+    const id = setInterval(() => setTickCarrousel((t) => t + 1), INTERVALLE_CARROUSEL_MS)
+    return () => clearInterval(id)
+  }, [])
 
   const chargerProduits = useCallback(async () => {
     setErreur(null)
     const { data, error } = await supabase
       .from('produits')
-      .select('*, variantes_produit(*)')
+      .select('*, variantes_produit(*), produit_photos(*)')
       .eq('actif', true)
       .order('ordre', { ascending: true })
     if (error) {
@@ -169,6 +185,10 @@ export default function Vente({ benevole }) {
           const stock = stockTotalProduit(produit)
           const rupture = stock !== null && stock <= 0
           const bas = stock !== null && stock > 0 && stock <= SEUIL_STOCK_BAS
+          const photos = photosProduit(produit)
+          const photoActuelle = photos.length
+            ? photos[tickCarrousel % photos.length]
+            : null
           return (
             <button
               key={produit.id}
@@ -186,11 +206,7 @@ export default function Vente({ benevole }) {
                 </span>
               )}
               <div className="produit-image">
-                {produit.photo_url ? (
-                  <img src={produit.photo_url} alt={produit.nom} />
-                ) : (
-                  '🛍️'
-                )}
+                {photoActuelle ? <img src={photoActuelle} alt={produit.nom} /> : '🛍️'}
               </div>
               <div className="produit-nom">{produit.nom}</div>
               <div className="produit-prix">{formatEuros(produit.prix)}</div>
@@ -280,3 +296,4 @@ export default function Vente({ benevole }) {
     </div>
   )
 }
+
