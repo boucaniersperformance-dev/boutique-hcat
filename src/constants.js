@@ -57,3 +57,18 @@ export function photosProduit(produit) {
     .map((p) => p.url)
   return [produit.photo_url, ...supplementaires].filter(Boolean)
 }
+
+// Stock total connu d'un produit (somme du stock_qty de ses déclinaisons,
+// en ignorant celles pas encore renseignées). Retourne null si aucune
+// déclinaison n'a de stock suivi — dans ce cas on ne peut pas savoir s'il
+// est en rupture, donc on ne le traite pas comme tel. Utilisé à la fois par
+// l'écran Vente (badge "Rupture", masquage automatique) et par l'écran
+// Produits (indication "masqué en vente").
+export function stockTotalProduit(produit) {
+  const variantes = produit.variantes_produit || []
+  const connues = variantes.filter(
+    (v) => v.stock_qty !== null && v.stock_qty !== undefined
+  )
+  if (connues.length === 0) return null
+  return connues.reduce((somme, v) => somme + v.stock_qty, 0)
+}
