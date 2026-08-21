@@ -6,6 +6,7 @@ import {
   CATEGORIES,
   categorieProduit,
   photosProduit,
+  stockTotalProduit,
 } from '../constants.js'
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
@@ -14,11 +15,13 @@ function clePanier(produitId, taille) {
   return `${produitId}|${taille || ''}`
 }
 
-function stockTotalProduit(produit) {
-  const variantes = produit.variantes_produit || []
-  const connues = variantes.filter((v) => v.stock_qty !== null && v.stock_qty !== undefined)
-  if (connues.length === 0) return null
-  return connues.reduce((somme, v) => somme + v.stock_qty, 0)
+// Un produit dont tout le stock suivi est à 0 est considéré épuisé : on ne
+// l'affiche plus dans la grille de vente pour ne pas la surcharger inutilement
+// (il redevient visible automatiquement dès qu'un responsable remet du
+// stock). Un produit dont le stock n'est pas suivi (null) reste affiché.
+function produitEnStock(produit) {
+  const stock = stockTotalProduit(produit)
+  return stock === null || stock > 0
 }
 
 const INTERVALLE_CARROUSEL_MS = 3000
@@ -154,14 +157,17 @@ export default function Vente({ benevole }) {
 
   const comptesParCategorie = useMemo(() => {
     const compte = { adulte: 0, enfant: 0, goodies: 0 }
-    produits.forEach((p) => {
+    produits.filter(produitEnStock).forEach((p) => {
       compte[categorieProduit(p)] += 1
     })
     return compte
   }, [produits])
 
   const produitsAffiches = useMemo(
-    () => produits.filter((p) => categoriesActives[categorieProduit(p)]),
+    () =>
+      produits.filter(
+        (p) => produitEnStock(p) && categoriesActives[categorieProduit(p)]
+      ),
     [produits, categoriesActives]
   )
 
