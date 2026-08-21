@@ -73,7 +73,8 @@ export default function Login({ onConnecte }) {
   return (
     <div className="login-ecran">
       <div className="login-carte">
-        <h1>🏆 Boutique HCAT — identification</h1>
+        <img src="/logo.png" alt="Boucaniers" className="logo-login" />
+        <h1>Boutique HCAT — identification</h1>
 
         {chargement && <p className="chargement">Chargement des bénévoles…</p>}
         {erreurListe && <p className="erreur">{erreurListe}</p>}
@@ -133,3 +134,4 @@ export default function Login({ onConnecte }) {
     </div>
   )
 }
+
