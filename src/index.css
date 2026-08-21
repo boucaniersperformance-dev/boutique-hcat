@@ -218,14 +218,74 @@ input {
 
 .ecran-vente {
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 190px 1fr 360px;
   gap: 18px;
   align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .ecran-vente {
+    grid-template-columns: 160px 1fr 320px;
+  }
 }
 
 @media (max-width: 900px) {
   .ecran-vente {
     grid-template-columns: 1fr;
+  }
+}
+
+.filtres-categories {
+  background: var(--carte);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 14px;
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filtres-categories h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.filtre-case {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--bordure);
+  background: var(--fond);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.filtre-case input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.filtre-case .compte {
+  margin-left: auto;
+  color: var(--texte-clair);
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 900px) {
+  .filtres-categories {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .filtre-case {
+    flex: 1 1 auto;
   }
 }
 

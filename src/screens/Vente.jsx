@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { formatEuros, SEUIL_STOCK_BAS } from '../constants.js'
+import { formatEuros, SEUIL_STOCK_BAS, CATEGORIES, categorieProduit } from '../constants.js'
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
 
@@ -20,6 +20,9 @@ export default function Vente({ benevole }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [panier, setPanier] = useState([])
+  const [categoriesActives, setCategoriesActives] = useState(() =>
+    Object.fromEntries(CATEGORIES.map((c) => [c.cle, true]))
+  )
   const [produitOuvert, setProduitOuvert] = useState(null)
   const [paiementOuvert, setPaiementOuvert] = useState(false)
   const [enregistrement, setEnregistrement] = useState(false)
@@ -121,13 +124,48 @@ export default function Vente({ benevole }) {
     chargerProduits()
   }
 
+  const comptesParCategorie = useMemo(() => {
+    const compte = { adulte: 0, enfant: 0, goodies: 0 }
+    produits.forEach((p) => {
+      compte[categorieProduit(p)] += 1
+    })
+    return compte
+  }, [produits])
+
+  const produitsAffiches = useMemo(
+    () => produits.filter((p) => categoriesActives[categorieProduit(p)]),
+    [produits, categoriesActives]
+  )
+
+  function basculerCategorie(cle) {
+    setCategoriesActives((etat) => ({ ...etat, [cle]: !etat[cle] }))
+  }
+
   if (chargement) return <div className="chargement">Chargement des produits…</div>
   if (erreur) return <p className="erreur">{erreur}</p>
 
   return (
     <div className="ecran-vente">
+      <aside className="filtres-categories">
+        <h2>Filtrer</h2>
+        {CATEGORIES.map((cat) => (
+          <label className="filtre-case" key={cat.cle}>
+            <input
+              type="checkbox"
+              checked={categoriesActives[cat.cle]}
+              onChange={() => basculerCategorie(cat.cle)}
+            />
+            {cat.label}
+            <span className="compte">{comptesParCategorie[cat.cle]}</span>
+          </label>
+        ))}
+      </aside>
+
       <div className="grille-produits">
-        {produits.map((produit) => {
+        {produitsAffiches.length === 0 && (
+          <p className="panier-vide">Aucun article dans cette catégorie</p>
+        )}
+        {produitsAffiches.map((produit) => {
           const stock = stockTotalProduit(produit)
           const rupture = stock !== null && stock <= 0
           const bas = stock !== null && stock > 0 && stock <= SEUIL_STOCK_BAS

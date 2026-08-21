@@ -19,3 +19,18 @@ export function formatEuros(montant) {
 }
 
 export const SEUIL_STOCK_BAS = 3
+
+// Catégories utilisées pour le filtre de l'écran de vente. Déduites des
+// champs déjà en base (necessite_taille / jeu_tailles) : pas besoin de
+// colonne supplémentaire.
+export const CATEGORIES = [
+  { cle: 'adulte', label: 'Vêtements adulte' },
+  { cle: 'enfant', label: 'Vêtements enfant' },
+  { cle: 'goodies', label: 'Goodies' },
+]
+
+export function categorieProduit(produit) {
+  if (produit.necessite_taille && produit.jeu_tailles === 'adulte') return 'adulte'
+  if (produit.necessite_taille && produit.jeu_tailles === 'enfant') return 'enfant'
+  return 'goodies'
+}

@@ -23,7 +23,14 @@
 --     exactement à une fonction définie ici.
 -- =====================================================================
 
-create extension if not exists pgcrypto;
+-- Sur Supabase, les extensions comme pgcrypto s'installent dans un schéma
+-- "extensions" séparé de "public". On le crée au cas où, puis on l'ajoute
+-- explicitement au search_path de cette session pour que les appels à
+-- crypt()/gen_salt() plus bas (y compris hors des fonctions) fonctionnent
+-- quel que soit le réglage par défaut du projet.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+set search_path = public, extensions;
 
 -- ---------------------------------------------------------------------
 -- Tables
@@ -134,7 +141,7 @@ create or replace function lister_benevoles_actifs()
 returns table(id uuid, nom text)
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select id, nom from benevoles where actif = true order by nom;
 $$;
@@ -144,7 +151,7 @@ create or replace function verifier_pin(p_benevole_id uuid, p_pin text)
 returns table(ok boolean, nom text, role text)
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_benevole benevoles%rowtype;
@@ -175,7 +182,7 @@ create or replace function enregistrer_vente(
 ) returns table(vente_id uuid, total numeric, monnaie numeric)
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_benevole benevoles%rowtype;
@@ -254,7 +261,7 @@ create or replace function modifier_produit(
 ) returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not exists (
@@ -280,7 +287,7 @@ create or replace function modifier_stock(
 ) returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not exists (
@@ -301,7 +308,7 @@ create or replace function lister_benevoles(p_benevole_id uuid)
 returns table(id uuid, nom text, role text, actif boolean, created_at timestamptz)
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not exists (
@@ -327,7 +334,7 @@ create or replace function ajouter_benevole(
 ) returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_id uuid;
@@ -363,7 +370,7 @@ create or replace function changer_statut_benevole(
 ) returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not exists (
@@ -385,7 +392,7 @@ create or replace function changer_pin_benevole(
 ) returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not exists (
@@ -422,7 +429,7 @@ create or replace function lister_ventes(
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if not exists (
