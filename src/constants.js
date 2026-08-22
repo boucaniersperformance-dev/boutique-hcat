@@ -72,3 +72,23 @@ export function stockTotalProduit(produit) {
   if (connues.length === 0) return null
   return connues.reduce((somme, v) => somme + v.stock_qty, 0)
 }
+
+// Lieux possibles pour un match (encart en haut de l'écran Vente).
+export const LIEUX_MATCH = [
+  { cle: 'domicile', label: 'Domicile' },
+  { cle: 'exterieur', label: 'Extérieur' },
+]
+
+export function labelLieuMatch(lieu) {
+  return LIEUX_MATCH.find((l) => l.cle === lieu)?.label || lieu || ''
+}
+
+// Résumé court d'un match, utilisé dans l'encart Vente, l'historique et le
+// PDF de bilan : "vs Anglet HC — Domicile — 05/09/2026".
+export function resumeMatch(match) {
+  if (!match) return ''
+  const date = match.date_match
+    ? new Date(match.date_match + 'T00:00:00').toLocaleDateString('fr-FR')
+    : ''
+  return `vs ${match.adversaire} — ${labelLieuMatch(match.lieu)} — ${date}`
+}
