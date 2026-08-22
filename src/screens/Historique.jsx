@@ -22,6 +22,11 @@ export default function Historique({ benevole }) {
   const [chargementMatchs, setChargementMatchs] = useState(true)
   const [erreurMatchs, setErreurMatchs] = useState(null)
 
+  const [matchASupprimer, setMatchASupprimer] = useState(null)
+  const [pinConfirmationMatch, setPinConfirmationMatch] = useState('')
+  const [erreurSuppressionMatch, setErreurSuppressionMatch] = useState(null)
+  const [suppressionMatchEnCours, setSuppressionMatchEnCours] = useState(false)
+
   const chargerMatchs = useCallback(async () => {
     setChargementMatchs(true)
     setErreurMatchs(null)
@@ -127,6 +132,50 @@ export default function Historique({ benevole }) {
     charger()
   }
 
+  function ouvrirSuppressionMatch(match) {
+    setMatchASupprimer(match)
+    setPinConfirmationMatch('')
+    setErreurSuppressionMatch(null)
+  }
+
+  function fermerSuppressionMatch() {
+    if (suppressionMatchEnCours) return
+    setMatchASupprimer(null)
+  }
+
+  async function confirmerSuppressionMatch() {
+    if (!/^\d{4}$/.test(pinConfirmationMatch)) {
+      setErreurSuppressionMatch('Le code doit contenir exactement 4 chiffres.')
+      return
+    }
+    setSuppressionMatchEnCours(true)
+    setErreurSuppressionMatch(null)
+
+    // Supprime d'abord le fichier PDF du stockage (chemin = `<id>.pdf`,
+    // voir EncartMatch), puis la fiche du match en base. Une erreur de
+    // stockage n'empêche pas la suppression en base : le fichier peut déjà
+    // avoir disparu, ou ne jamais avoir été retrouvé — dans les deux cas on
+    // ne veut pas bloquer le responsable qui souhaite nettoyer l'historique.
+    await supabase.storage.from('rapports-matchs').remove([`${matchASupprimer.id}.pdf`])
+
+    const { error } = await supabase.rpc('supprimer_match', {
+      p_benevole_id: benevole.id,
+      p_pin: pinConfirmationMatch,
+      p_match_id: matchASupprimer.id,
+    })
+    setSuppressionMatchEnCours(false)
+    if (error) {
+      setErreurSuppressionMatch(
+        error.message === 'Code PIN incorrect'
+          ? 'Code PIN incorrect.'
+          : 'La suppression a échoué.'
+      )
+      return
+    }
+    setMatchASupprimer(null)
+    chargerMatchs()
+  }
+
   return (
     <div className="bloc">
       <h2>Historique des ventes</h2>
@@ -216,6 +265,7 @@ export default function Historique({ benevole }) {
                   <th>Total</th>
                   <th>Clôturé le</th>
                   <th>Rapport</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -234,11 +284,20 @@ export default function Historique({ benevole }) {
                         '—'
                       )}
                     </td>
+                    <td>
+                      <button
+                        className="bouton-icone"
+                        title="Supprimer ce rapport"
+                        onClick={() => ouvrirSuppressionMatch(m)}
+                      >
+                        🗑️
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {matchs.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
                       Aucun match clôturé pour l'instant
                     </td>
                   </tr>
@@ -291,6 +350,51 @@ export default function Historique({ benevole }) {
                 disabled={suppressionEnCours || !/^\d{4}$/.test(pinConfirmation)}
               >
                 {suppressionEnCours ? 'Suppression…' : 'Supprimer définitivement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {matchASupprimer && (
+        <div className="fond-modale" onClick={fermerSuppressionMatch}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>Supprimer ce rapport de match ?</h2>
+            <p>{resumeMatch(matchASupprimer)}</p>
+            <p>
+              Cette action est irréversible : le PDF sera définitivement
+              supprimé du stockage et ce match disparaîtra de l'historique.
+              Les ventes déjà enregistrées ne sont pas supprimées — elles
+              redeviennent simplement des ventes "hors match". Entre le code
+              PIN d'un responsable pour confirmer.
+            </p>
+            <div className="champ">
+              <label>Code PIN responsable</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                autoFocus
+                value={pinConfirmationMatch}
+                onChange={(e) => setPinConfirmationMatch(e.target.value.replace(/\D/g, ''))}
+                placeholder="1234"
+              />
+            </div>
+            {erreurSuppressionMatch && <p className="erreur">{erreurSuppressionMatch}</p>}
+            <div className="modale-actions">
+              <button
+                className="bouton-secondaire"
+                onClick={fermerSuppressionMatch}
+                disabled={suppressionMatchEnCours}
+              >
+                Annuler
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={confirmerSuppressionMatch}
+                disabled={suppressionMatchEnCours || !/^\d{4}$/.test(pinConfirmationMatch)}
+              >
+                {suppressionMatchEnCours ? 'Suppression…' : 'Supprimer définitivement'}
               </button>
             </div>
           </div>
