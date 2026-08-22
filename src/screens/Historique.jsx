@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { formatEuros } from '../constants.js'
+import { formatEuros, resumeMatch } from '../constants.js'
 
 function aujourdHui() {
   return new Date().toISOString().slice(0, 10)
@@ -17,6 +17,28 @@ export default function Historique({ benevole }) {
   const [pinConfirmation, setPinConfirmation] = useState('')
   const [erreurSuppression, setErreurSuppression] = useState(null)
   const [suppressionEnCours, setSuppressionEnCours] = useState(false)
+
+  const [matchs, setMatchs] = useState([])
+  const [chargementMatchs, setChargementMatchs] = useState(true)
+  const [erreurMatchs, setErreurMatchs] = useState(null)
+
+  const chargerMatchs = useCallback(async () => {
+    setChargementMatchs(true)
+    setErreurMatchs(null)
+    const { data, error } = await supabase.rpc('lister_matchs', {
+      p_benevole_id: benevole.id,
+    })
+    if (error) {
+      setErreurMatchs("Impossible de charger les rapports de match.")
+    } else {
+      setMatchs(data || [])
+    }
+    setChargementMatchs(false)
+  }, [benevole.id])
+
+  useEffect(() => {
+    chargerMatchs()
+  }, [chargerMatchs])
 
   const charger = useCallback(async () => {
     setChargement(true)
@@ -177,6 +199,55 @@ export default function Historique({ benevole }) {
           </div>
         </>
       )}
+
+      <div className="bloc" style={{ marginTop: 32 }}>
+        <h2>Rapports de match</h2>
+
+        {chargementMatchs && <p className="chargement">Chargement…</p>}
+        {erreurMatchs && <p className="erreur">{erreurMatchs}</p>}
+
+        {!chargementMatchs && !erreurMatchs && (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tableau-admin">
+              <thead>
+                <tr>
+                  <th>Match</th>
+                  <th>Ventes</th>
+                  <th>Total</th>
+                  <th>Clôturé le</th>
+                  <th>Rapport</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matchs.map((m) => (
+                  <tr key={m.id}>
+                    <td>{resumeMatch(m)}</td>
+                    <td>{m.nb_ventes}</td>
+                    <td>{formatEuros(m.total_ventes)}</td>
+                    <td>{new Date(m.cloture_le).toLocaleString('fr-FR')}</td>
+                    <td>
+                      {m.pdf_url ? (
+                        <a href={m.pdf_url} target="_blank" rel="noreferrer">
+                          Télécharger le PDF
+                        </a>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {matchs.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
+                      Aucun match clôturé pour l'instant
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {venteASupprimer && (
         <div className="fond-modale" onClick={fermerSuppression}>
