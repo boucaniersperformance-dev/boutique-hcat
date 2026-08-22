@@ -312,6 +312,67 @@ input {
   }
 }
 
+/* Encart "match en cours" en haut de l'écran de vente : bannière hors de
+   la grille .ecran-vente (affichée juste au-dessus), pour rester visible
+   quelle que soit la disposition (desktop ou mobile empilé). */
+.encart-match {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--carte);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+
+.encart-match-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.encart-match-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--vert);
+  color: white;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.encart-match-resume {
+  font-weight: 600;
+  color: var(--bleu);
+}
+
+.encart-match-resume-vide {
+  font-weight: 500;
+  color: var(--texte-clair);
+}
+
+.encart-match-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.encart-match .formulaire-match {
+  width: 100%;
+}
+
+.encart-match .erreur {
+  width: 100%;
+  margin: 4px 0 0;
+}
+
 .filtres-categories {
   grid-area: filtres;
   background: var(--carte);
@@ -1098,4 +1159,3 @@ table.tableau-admin .panneau-edition input[type="text"] {
   padding: 10px 16px;
   font-weight: 700;
 }
-
