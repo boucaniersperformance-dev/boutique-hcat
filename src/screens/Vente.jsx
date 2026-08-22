@@ -10,6 +10,7 @@ import {
 } from '../constants.js'
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
+import EncartMatch from '../components/EncartMatch.jsx'
 
 function clePanier(produitId, taille) {
   return `${produitId}|${taille || ''}`
@@ -40,6 +41,7 @@ export default function Vente({ benevole }) {
   const [succes, setSucces] = useState(null)
   const [erreurVente, setErreurVente] = useState(null)
   const [tickCarrousel, setTickCarrousel] = useState(0)
+  const [matchCourant, setMatchCourant] = useState(null)
 
   // Un seul minuteur partagé par toutes les vignettes (plutôt qu'un par
   // produit) fait avancer le carrousel des photos face/dos toutes les 3s.
@@ -136,6 +138,7 @@ export default function Vente({ benevole }) {
       p_mode_paiement: mode,
       p_montant_recu: montantRecu,
       p_lignes: lignes,
+      p_match_id: matchCourant?.id ?? null,
     })
     setEnregistrement(false)
     if (error) {
@@ -188,147 +191,150 @@ export default function Vente({ benevole }) {
   if (erreur) return <p className="erreur">{erreur}</p>
 
   return (
-    <div className="ecran-vente">
-      <aside className="filtres-categories">
-        <h2>Filtrer</h2>
-        <button
-          type="button"
-          className="bouton-tout-filtres"
-          onClick={basculerToutesCategories}
-        >
-          {toutesCategoriesActives ? 'Tout désélectionner' : 'Tout sélectionner'}
-        </button>
-        {CATEGORIES.map((cat) => (
-          <label className="filtre-case" key={cat.cle}>
-            <input
-              type="checkbox"
-              checked={categoriesActives[cat.cle]}
-              onChange={() => basculerCategorie(cat.cle)}
-            />
-            {cat.label}
-            <span className="compte">{comptesParCategorie[cat.cle]}</span>
-          </label>
-        ))}
-      </aside>
+    <>
+      <EncartMatch benevole={benevole} produits={produits} onMatchChange={setMatchCourant} />
+      <div className="ecran-vente">
+        <aside className="filtres-categories">
+          <h2>Filtrer</h2>
+          <button
+            type="button"
+            className="bouton-tout-filtres"
+            onClick={basculerToutesCategories}
+          >
+            {toutesCategoriesActives ? 'Tout désélectionner' : 'Tout sélectionner'}
+          </button>
+          {CATEGORIES.map((cat) => (
+            <label className="filtre-case" key={cat.cle}>
+              <input
+                type="checkbox"
+                checked={categoriesActives[cat.cle]}
+                onChange={() => basculerCategorie(cat.cle)}
+              />
+              {cat.label}
+              <span className="compte">{comptesParCategorie[cat.cle]}</span>
+            </label>
+          ))}
+        </aside>
 
-      <div className="grille-produits">
-        {produitsAffiches.length === 0 && (
-          <p className="panier-vide">Aucun article dans cette catégorie</p>
-        )}
-        {produitsAffiches.map((produit) => {
-          const stock = stockTotalProduit(produit)
-          const rupture = stock !== null && stock <= 0
-          const bas = stock !== null && stock > 0 && stock <= SEUIL_STOCK_BAS
-          const photos = photosProduit(produit)
-          const photoActuelle = photos.length
-            ? photos[tickCarrousel % photos.length]
-            : null
-          return (
-            <button
-              key={produit.id}
-              className="produit-bouton"
-              onClick={() => setProduitOuvert(produit)}
-            >
-              {!produit.prix && (
-                <span className="badge-prix-manquant">Prix à définir</span>
-              )}
-              {stock !== null && (
-                <span
-                  className={`badge-stock${rupture ? ' rupture' : bas ? ' bas' : ''}`}
-                >
-                  {rupture ? 'Rupture' : stock}
-                </span>
-              )}
-              <div className="produit-image">
-                {photoActuelle ? <img src={photoActuelle} alt={produit.nom} /> : '🛍️'}
-              </div>
-              <div className="produit-nom">{produit.nom}</div>
-              <div className="produit-prix">{formatEuros(produit.prix)}</div>
-            </button>
-          )
-        })}
-      </div>
-
-      <aside className="panier">
-        <h2>Panier</h2>
-        {panier.length === 0 && <p className="panier-vide">Aucun article pour l'instant</p>}
-        <div className="panier-lignes">
-          {panier.map((l) => (
-            <div className="panier-ligne" key={l.cle}>
-              <div className="panier-ligne-info">
-                <span className="panier-ligne-nom">{l.nom}</span>
-                <span className="panier-ligne-detail">
-                  {l.taille ? `Taille ${l.taille} · ` : ''}
-                  {formatEuros(l.prix_unitaire)} × {l.quantite} ={' '}
-                  {formatEuros(l.prix_unitaire * l.quantite)}
-                </span>
-              </div>
-              <div className="panier-ligne-actions">
-                <div className="pas-a-pas">
-                  <button onClick={() => modifierQuantite(l.cle, -1)}>−</button>
-                  <span>{l.quantite}</span>
-                  <button onClick={() => modifierQuantite(l.cle, 1)}>+</button>
+        <div className="grille-produits">
+          {produitsAffiches.length === 0 && (
+            <p className="panier-vide">Aucun article dans cette catégorie</p>
+          )}
+          {produitsAffiches.map((produit) => {
+            const stock = stockTotalProduit(produit)
+            const rupture = stock !== null && stock <= 0
+            const bas = stock !== null && stock > 0 && stock <= SEUIL_STOCK_BAS
+            const photos = photosProduit(produit)
+            const photoActuelle = photos.length
+              ? photos[tickCarrousel % photos.length]
+              : null
+            return (
+              <button
+                key={produit.id}
+                className="produit-bouton"
+                onClick={() => setProduitOuvert(produit)}
+              >
+                {!produit.prix && (
+                  <span className="badge-prix-manquant">Prix à définir</span>
+                )}
+                {stock !== null && (
+                  <span
+                    className={`badge-stock${rupture ? ' rupture' : bas ? ' bas' : ''}`}
+                  >
+                    {rupture ? 'Rupture' : stock}
+                  </span>
+                )}
+                <div className="produit-image">
+                  {photoActuelle ? <img src={photoActuelle} alt={produit.nom} /> : '🛍️'}
                 </div>
-                <button className="bouton-supprimer" onClick={() => supprimerLigne(l.cle)}>
-                  ✕
+                <div className="produit-nom">{produit.nom}</div>
+                <div className="produit-prix">{formatEuros(produit.prix)}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        <aside className="panier">
+          <h2>Panier</h2>
+          {panier.length === 0 && <p className="panier-vide">Aucun article pour l'instant</p>}
+          <div className="panier-lignes">
+            {panier.map((l) => (
+              <div className="panier-ligne" key={l.cle}>
+                <div className="panier-ligne-info">
+                  <span className="panier-ligne-nom">{l.nom}</span>
+                  <span className="panier-ligne-detail">
+                    {l.taille ? `Taille ${l.taille} · ` : ''}
+                    {formatEuros(l.prix_unitaire)} × {l.quantite} ={' '}
+                    {formatEuros(l.prix_unitaire * l.quantite)}
+                  </span>
+                </div>
+                <div className="panier-ligne-actions">
+                  <div className="pas-a-pas">
+                    <button onClick={() => modifierQuantite(l.cle, -1)}>−</button>
+                    <span>{l.quantite}</span>
+                    <button onClick={() => modifierQuantite(l.cle, 1)}>+</button>
+                  </div>
+                  <button className="bouton-supprimer" onClick={() => supprimerLigne(l.cle)}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="panier-total">
+            <span>Total</span>
+            <span>{formatEuros(total)}</span>
+          </div>
+
+          {erreurVente && <p className="erreur">{erreurVente}</p>}
+
+          <button
+            className="bouton-principal"
+            disabled={panier.length === 0}
+            onClick={() => setPaiementOuvert(true)}
+          >
+            Encaisser
+          </button>
+        </aside>
+
+        {produitOuvert && (
+          <AjoutModal
+            produit={produitOuvert}
+            onFermer={() => setProduitOuvert(null)}
+            onValider={(choix) => ajouterAuPanier(produitOuvert, choix)}
+            onValiderEtPayer={(choix) => ajouterEtPayer(produitOuvert, choix)}
+          />
+        )}
+
+        {paiementOuvert && (
+          <PaiementModal
+            total={total}
+            enCours={enregistrement}
+            onFermer={() => setPaiementOuvert(false)}
+            onValider={validerVente}
+          />
+        )}
+
+        {succes && (
+          <div className="fond-modale" onClick={() => setSucces(null)}>
+            <div className="modale" onClick={(e) => e.stopPropagation()}>
+              <div className="succes-ecran">
+                <div className="succes-icone">✅</div>
+                <h2>Vente enregistrée</h2>
+                <p>Total : {formatEuros(succes.total)}</p>
+                {succes.mode === 'especes' && succes.monnaie !== null && (
+                  <p>Monnaie rendue : {formatEuros(succes.monnaie)}</p>
+                )}
+                <button className="bouton-principal" onClick={() => setSucces(null)}>
+                  Nouvelle vente
                 </button>
               </div>
             </div>
-          ))}
-        </div>
-
-        <div className="panier-total">
-          <span>Total</span>
-          <span>{formatEuros(total)}</span>
-        </div>
-
-        {erreurVente && <p className="erreur">{erreurVente}</p>}
-
-        <button
-          className="bouton-principal"
-          disabled={panier.length === 0}
-          onClick={() => setPaiementOuvert(true)}
-        >
-          Encaisser
-        </button>
-      </aside>
-
-      {produitOuvert && (
-        <AjoutModal
-          produit={produitOuvert}
-          onFermer={() => setProduitOuvert(null)}
-          onValider={(choix) => ajouterAuPanier(produitOuvert, choix)}
-          onValiderEtPayer={(choix) => ajouterEtPayer(produitOuvert, choix)}
-        />
-      )}
-
-      {paiementOuvert && (
-        <PaiementModal
-          total={total}
-          enCours={enregistrement}
-          onFermer={() => setPaiementOuvert(false)}
-          onValider={validerVente}
-        />
-      )}
-
-      {succes && (
-        <div className="fond-modale" onClick={() => setSucces(null)}>
-          <div className="modale" onClick={(e) => e.stopPropagation()}>
-            <div className="succes-ecran">
-              <div className="succes-icone">✅</div>
-              <h2>Vente enregistrée</h2>
-              <p>Total : {formatEuros(succes.total)}</p>
-              {succes.mode === 'especes' && succes.monnaie !== null && (
-                <p>Monnaie rendue : {formatEuros(succes.monnaie)}</p>
-              )}
-              <button className="bouton-principal" onClick={() => setSucces(null)}>
-                Nouvelle vente
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   )
 }
 
