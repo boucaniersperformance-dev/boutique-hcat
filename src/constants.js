@@ -10,13 +10,41 @@ export function taillesPourJeu(jeuTailles) {
   return []
 }
 
-// Ordre logique des tailles (XS→XXL, puis les tranches d'âge), pour trier
-// les lignes de stock au lieu de l'ordre alphabétique par défaut.
+// Âges disponibles pour ajouter/corriger une taille enfant par âge précis
+// (ex : "8 ans"), en plus des tranches par défaut ("5-6 ans"...) créées à
+// la création du produit — utilisé pour le menu déroulant de l'écran
+// Produits, afin de ne jamais avoir à taper "ans" à la main.
+export const AGES_ENFANT = Array.from({ length: 8 }, (_, i) => `${i + 5} ans`)
+
+// Ordre logique des tailles (XS→XXL, puis les tranches d'âge par défaut),
+// pour trier les lignes de stock au lieu de l'ordre alphabétique par défaut.
 const ORDRE_TAILLES = [...TAILLES_ADULTE, ...TAILLES_ENFANT]
+
+// Premier nombre trouvé dans un libellé de taille (ex : 5 dans "5-6 ans",
+// 8 dans "8 ans"). Sert à trier par ordre numérique croissant les tailles
+// ajoutées manuellement (âges précis), qui ne font pas partie du jeu
+// standard ci-dessus et n'auraient donc sinon qu'un tri alphabétique
+// (ce qui classerait "10 ans" avant "5 ans").
+function premierNombre(taille) {
+  const trouve = String(taille || '').match(/\d+/)
+  return trouve ? parseInt(trouve[0], 10) : null
+}
 
 export function comparerTailles(a, b) {
   const ia = ORDRE_TAILLES.indexOf(a || '')
   const ib = ORDRE_TAILLES.indexOf(b || '')
+  // Les deux tailles font partie du jeu standard (XS...XXL, tranches
+  // d'âge par défaut) : on garde cet ordre précis plutôt qu'un tri
+  // numérique, pour départager XS/S/M... (pas de chiffre) et conserver
+  // "5-6 ans" avant "7-9 ans" sans ambiguïté.
+  if (ia !== -1 && ib !== -1) return ia - ib
+
+  // Sinon (au moins une taille ajoutée manuellement, hors jeu standard) :
+  // tri par ordre numérique croissant dès qu'un chiffre est détectable.
+  const na = premierNombre(a)
+  const nb = premierNombre(b)
+  if (na !== null && nb !== null) return na - nb
+
   if (ia === -1 && ib === -1) return (a || '').localeCompare(b || '')
   if (ia === -1) return 1
   if (ib === -1) return -1
