@@ -6,6 +6,7 @@ import {
   CATEGORIES,
   categorieProduit,
   stockTotalProduit,
+  AGES_ENFANT,
 } from '../constants.js'
 import RecadrageModal from '../components/RecadrageModal.jsx'
 
@@ -42,6 +43,11 @@ export default function AdminProduits({ benevole }) {
   const [nouvelleTailleTexte, setNouvelleTailleTexte] = useState('')
   const [erreurTaille, setErreurTaille] = useState(null)
   const [actionTailleEnCours, setActionTailleEnCours] = useState(false)
+
+  const [produitAjoutTaille, setProduitAjoutTaille] = useState(null)
+  const [nouvelleTailleAjout, setNouvelleTailleAjout] = useState('')
+  const [erreurAjoutTaille, setErreurAjoutTaille] = useState(null)
+  const [actionAjoutTailleEnCours, setActionAjoutTailleEnCours] = useState(false)
 
   const charger = useCallback(async () => {
     setErreur(null)
@@ -164,9 +170,29 @@ export default function AdminProduits({ benevole }) {
     afficherMessage(produitId, 'Stock mis à jour ✓')
   }
 
+  // Âges du menu déroulant ("5 ans"..."12 ans") pas encore utilisés par ce
+  // produit, pour éviter de proposer un doublon (rejeté de toute façon côté
+  // base, mais autant ne pas le proposer). `tailleAConserver` permet de
+  // garder l'âge actuel d'une déclinaison en cours de correction dans ses
+  // propres options.
+  function agesLibres(produit, tailleAConserver) {
+    const utilisees = new Set(
+      (produit.variantes_produit || [])
+        .map((v) => v.taille)
+        .filter((t) => t && t !== tailleAConserver)
+    )
+    return AGES_ENFANT.filter((age) => !utilisees.has(age))
+  }
+
   function ouvrirModificationTaille(produit, variante) {
     setTailleAModifier({ produit, variante })
-    setNouvelleTailleTexte(variante.taille || '')
+    setNouvelleTailleTexte(
+      produit.jeu_tailles === 'enfant'
+        ? AGES_ENFANT.includes(variante.taille)
+          ? variante.taille
+          : ''
+        : variante.taille || ''
+    )
     setErreurTaille(null)
   }
 
@@ -210,6 +236,41 @@ export default function AdminProduits({ benevole }) {
     )
     setTailleAModifier(null)
     afficherMessage(produit.id, 'Taille corrigée ✓')
+  }
+
+  function ouvrirAjoutTaille(produit) {
+    setProduitAjoutTaille(produit)
+    const libres = agesLibres(produit, null)
+    setNouvelleTailleAjout(produit.jeu_tailles === 'enfant' ? libres[0] || '' : '')
+    setErreurAjoutTaille(null)
+  }
+
+  function fermerAjoutTaille() {
+    if (actionAjoutTailleEnCours) return
+    setProduitAjoutTaille(null)
+  }
+
+  async function confirmerAjoutTaille() {
+    const nouvelle = nouvelleTailleAjout.trim()
+    if (!nouvelle) {
+      setErreurAjoutTaille('La taille ne peut pas être vide.')
+      return
+    }
+    setActionAjoutTailleEnCours(true)
+    setErreurAjoutTaille(null)
+    const { error } = await supabase.rpc('ajouter_taille_variante', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produitAjoutTaille.id,
+      p_taille: nouvelle,
+    })
+    setActionAjoutTailleEnCours(false)
+    if (error) {
+      setErreurAjoutTaille(error.message || "L'ajout a échoué.")
+      return
+    }
+    afficherMessage(produitAjoutTaille.id, 'Taille ajoutée ✓')
+    setProduitAjoutTaille(null)
+    charger()
   }
 
   // `blob` est toujours l'image déjà recadrée et compressée en JPEG carré
@@ -655,6 +716,16 @@ export default function AdminProduits({ benevole }) {
                         />
                       </div>
                     ))}
+                  {produit.necessite_taille && (
+                    <button
+                      type="button"
+                      className="bouton-secondaire"
+                      style={{ padding: '4px 10px', fontSize: '0.85rem' }}
+                      onClick={() => ouvrirAjoutTaille(produit)}
+                    >
+                      + Ajouter une taille
+                    </button>
+                  )}
                 </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -878,12 +949,30 @@ export default function AdminProduits({ benevole }) {
             </p>
             <div className="champ">
               <label>Nouvelle taille</label>
-              <input
-                type="text"
-                autoFocus
-                value={nouvelleTailleTexte}
-                onChange={(e) => setNouvelleTailleTexte(e.target.value)}
-              />
+              {tailleAModifier.produit.jeu_tailles === 'enfant' ? (
+                <select
+                  autoFocus
+                  value={nouvelleTailleTexte}
+                  onChange={(e) => setNouvelleTailleTexte(e.target.value)}
+                >
+                  <option value="">— Choisir un âge —</option>
+                  {agesLibres(
+                    tailleAModifier.produit,
+                    tailleAModifier.variante.taille
+                  ).map((age) => (
+                    <option key={age} value={age}>
+                      {age}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  autoFocus
+                  value={nouvelleTailleTexte}
+                  onChange={(e) => setNouvelleTailleTexte(e.target.value)}
+                />
+              )}
             </div>
             {erreurTaille && <p className="erreur">{erreurTaille}</p>}
             <div className="modale-actions">
@@ -900,6 +989,62 @@ export default function AdminProduits({ benevole }) {
                 disabled={actionTailleEnCours || !nouvelleTailleTexte.trim()}
               >
                 {actionTailleEnCours ? 'Enregistrement…' : 'Confirmer la correction'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {produitAjoutTaille && (
+        <div className="fond-modale" onClick={fermerAjoutTaille}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>Ajouter une taille</h2>
+            <p>{produitAjoutTaille.nom}</p>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              Utile par exemple pour passer d'un système par tranche d'âge à
+              des âges précis : ajoute ici les tailles qui manquent, en plus
+              de celles déjà présentes. Le stock démarre à 0.
+            </p>
+            <div className="champ">
+              <label>Taille</label>
+              {produitAjoutTaille.jeu_tailles === 'enfant' ? (
+                <select
+                  autoFocus
+                  value={nouvelleTailleAjout}
+                  onChange={(e) => setNouvelleTailleAjout(e.target.value)}
+                >
+                  <option value="">— Choisir un âge —</option>
+                  {agesLibres(produitAjoutTaille, null).map((age) => (
+                    <option key={age} value={age}>
+                      {age}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Ex : 3XL"
+                  value={nouvelleTailleAjout}
+                  onChange={(e) => setNouvelleTailleAjout(e.target.value)}
+                />
+              )}
+            </div>
+            {erreurAjoutTaille && <p className="erreur">{erreurAjoutTaille}</p>}
+            <div className="modale-actions">
+              <button
+                className="bouton-secondaire"
+                onClick={fermerAjoutTaille}
+                disabled={actionAjoutTailleEnCours}
+              >
+                Annuler
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={confirmerAjoutTaille}
+                disabled={actionAjoutTailleEnCours || !nouvelleTailleAjout.trim()}
+              >
+                {actionAjoutTailleEnCours ? 'Ajout…' : 'Ajouter cette taille'}
               </button>
             </div>
           </div>
