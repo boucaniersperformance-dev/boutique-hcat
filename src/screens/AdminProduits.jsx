@@ -38,6 +38,12 @@ export default function AdminProduits({ benevole }) {
   const [creationEnCours, setCreationEnCours] = useState(false)
   const [erreurCreation, setErreurCreation] = useState(null)
 
+  const [tailleAModifier, setTailleAModifier] = useState(null) // { produit, variante }
+  const [nouvelleTailleTexte, setNouvelleTailleTexte] = useState('')
+  const [pinConfirmationTaille, setPinConfirmationTaille] = useState('')
+  const [erreurTaille, setErreurTaille] = useState(null)
+  const [actionTailleEnCours, setActionTailleEnCours] = useState(false)
+
   const charger = useCallback(async () => {
     setErreur(null)
     const { data, error } = await supabase
@@ -157,6 +163,61 @@ export default function AdminProduits({ benevole }) {
       })
     )
     afficherMessage(produitId, 'Stock mis à jour ✓')
+  }
+
+  function ouvrirModificationTaille(produit, variante) {
+    setTailleAModifier({ produit, variante })
+    setNouvelleTailleTexte(variante.taille || '')
+    setPinConfirmationTaille('')
+    setErreurTaille(null)
+  }
+
+  function fermerModificationTaille() {
+    if (actionTailleEnCours) return
+    setTailleAModifier(null)
+  }
+
+  async function confirmerModificationTaille() {
+    const nouvelle = nouvelleTailleTexte.trim()
+    if (!nouvelle) {
+      setErreurTaille('La taille ne peut pas être vide.')
+      return
+    }
+    if (!/^\d{4}$/.test(pinConfirmationTaille)) {
+      setErreurTaille('Le code doit contenir exactement 4 chiffres.')
+      return
+    }
+    setActionTailleEnCours(true)
+    setErreurTaille(null)
+    const { variante, produit } = tailleAModifier
+    const { error } = await supabase.rpc('renommer_taille_variante', {
+      p_benevole_id: benevole.id,
+      p_pin: pinConfirmationTaille,
+      p_variante_id: variante.id,
+      p_nouvelle_taille: nouvelle,
+    })
+    setActionTailleEnCours(false)
+    if (error) {
+      setErreurTaille(
+        error.message === 'Code PIN incorrect'
+          ? 'Code PIN incorrect.'
+          : error.message || 'La correction a échoué.'
+      )
+      return
+    }
+    setProduits((liste) =>
+      liste.map((p) => {
+        if (p.id !== produit.id) return p
+        return {
+          ...p,
+          variantes_produit: p.variantes_produit.map((v) =>
+            v.id === variante.id ? { ...v, taille: nouvelle } : v
+          ),
+        }
+      })
+    )
+    setTailleAModifier(null)
+    afficherMessage(produit.id, 'Taille corrigée ✓')
   }
 
   // `blob` est toujours l'image déjà recadrée et compressée en JPEG carré
@@ -577,7 +638,19 @@ export default function AdminProduits({ benevole }) {
                         key={variante.id}
                         style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}
                       >
-                        {variante.taille && <span>{variante.taille}</span>}
+                        {variante.taille && (
+                          <>
+                            <span>{variante.taille}</span>
+                            <button
+                              type="button"
+                              className="bouton-icone"
+                              title="Corriger le libellé de cette taille"
+                              onClick={() => ouvrirModificationTaille(produit, variante)}
+                            >
+                              ✏️
+                            </button>
+                          </>
+                        )}
                         <input
                           type="number"
                           min="0"
@@ -796,7 +869,67 @@ export default function AdminProduits({ benevole }) {
           onAnnuler={annulerRecadrage}
         />
       )}
+
+      {tailleAModifier && (
+        <div className="fond-modale" onClick={fermerModificationTaille}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>Corriger la taille</h2>
+            <p>
+              {tailleAModifier.produit.nom} — actuellement «{' '}
+              {tailleAModifier.variante.taille} »
+            </p>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              À utiliser quand l'étiquette du vêtement ne correspond pas à la
+              fiche (ex : marqué « 5-6 ans » alors que c'est un « 5 ans »).
+              Les ventes déjà enregistrées sous l'ancien libellé seront elles
+              aussi corrigées dans l'historique.
+            </p>
+            <div className="champ">
+              <label>Nouvelle taille</label>
+              <input
+                type="text"
+                autoFocus
+                value={nouvelleTailleTexte}
+                onChange={(e) => setNouvelleTailleTexte(e.target.value)}
+              />
+            </div>
+            <div className="champ">
+              <label>Code PIN responsable</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinConfirmationTaille}
+                onChange={(e) =>
+                  setPinConfirmationTaille(e.target.value.replace(/\D/g, ''))
+                }
+                placeholder="1234"
+              />
+            </div>
+            {erreurTaille && <p className="erreur">{erreurTaille}</p>}
+            <div className="modale-actions">
+              <button
+                className="bouton-secondaire"
+                onClick={fermerModificationTaille}
+                disabled={actionTailleEnCours}
+              >
+                Annuler
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={confirmerModificationTaille}
+                disabled={
+                  actionTailleEnCours ||
+                  !nouvelleTailleTexte.trim() ||
+                  !/^\d{4}$/.test(pinConfirmationTaille)
+                }
+              >
+                {actionTailleEnCours ? 'Enregistrement…' : 'Confirmer la correction'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
-
