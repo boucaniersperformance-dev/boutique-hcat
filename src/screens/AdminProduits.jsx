@@ -40,7 +40,6 @@ export default function AdminProduits({ benevole }) {
 
   const [tailleAModifier, setTailleAModifier] = useState(null) // { produit, variante }
   const [nouvelleTailleTexte, setNouvelleTailleTexte] = useState('')
-  const [pinConfirmationTaille, setPinConfirmationTaille] = useState('')
   const [erreurTaille, setErreurTaille] = useState(null)
   const [actionTailleEnCours, setActionTailleEnCours] = useState(false)
 
@@ -168,7 +167,6 @@ export default function AdminProduits({ benevole }) {
   function ouvrirModificationTaille(produit, variante) {
     setTailleAModifier({ produit, variante })
     setNouvelleTailleTexte(variante.taille || '')
-    setPinConfirmationTaille('')
     setErreurTaille(null)
   }
 
@@ -183,8 +181,7 @@ export default function AdminProduits({ benevole }) {
       setErreurTaille('La taille ne peut pas être vide.')
       return
     }
-    if (!/^\d{4}$/.test(pinConfirmationTaille)) {
-      setErreurTaille('Le code doit contenir exactement 4 chiffres.')
+    if (!window.confirm('Êtes-vous sûr de vouloir modifier la taille du produit ?')) {
       return
     }
     setActionTailleEnCours(true)
@@ -192,17 +189,12 @@ export default function AdminProduits({ benevole }) {
     const { variante, produit } = tailleAModifier
     const { error } = await supabase.rpc('renommer_taille_variante', {
       p_benevole_id: benevole.id,
-      p_pin: pinConfirmationTaille,
       p_variante_id: variante.id,
       p_nouvelle_taille: nouvelle,
     })
     setActionTailleEnCours(false)
     if (error) {
-      setErreurTaille(
-        error.message === 'Code PIN incorrect'
-          ? 'Code PIN incorrect.'
-          : error.message || 'La correction a échoué.'
-      )
+      setErreurTaille(error.message || 'La correction a échoué.')
       return
     }
     setProduits((liste) =>
@@ -893,19 +885,6 @@ export default function AdminProduits({ benevole }) {
                 onChange={(e) => setNouvelleTailleTexte(e.target.value)}
               />
             </div>
-            <div className="champ">
-              <label>Code PIN responsable</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                value={pinConfirmationTaille}
-                onChange={(e) =>
-                  setPinConfirmationTaille(e.target.value.replace(/\D/g, ''))
-                }
-                placeholder="1234"
-              />
-            </div>
             {erreurTaille && <p className="erreur">{erreurTaille}</p>}
             <div className="modale-actions">
               <button
@@ -918,11 +897,7 @@ export default function AdminProduits({ benevole }) {
               <button
                 className="bouton-principal"
                 onClick={confirmerModificationTaille}
-                disabled={
-                  actionTailleEnCours ||
-                  !nouvelleTailleTexte.trim() ||
-                  !/^\d{4}$/.test(pinConfirmationTaille)
-                }
+                disabled={actionTailleEnCours || !nouvelleTailleTexte.trim()}
               >
                 {actionTailleEnCours ? 'Enregistrement…' : 'Confirmer la correction'}
               </button>
