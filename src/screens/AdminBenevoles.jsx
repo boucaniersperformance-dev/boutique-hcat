@@ -18,6 +18,9 @@ export default function AdminBenevoles({ benevole }) {
   const [erreurEdition, setErreurEdition] = useState(null)
   const [actionEnCours, setActionEnCours] = useState(false)
 
+  // Codes PIN révélés à l'écran : { [id]: '1234' | 'indisponible' | 'chargement' }
+  const [pinsVisibles, setPinsVisibles] = useState({})
+
   const charger = useCallback(async () => {
     setErreur(null)
     const { data, error } = await supabase.rpc('lister_benevoles', {
@@ -133,6 +136,34 @@ export default function AdminBenevoles({ benevole }) {
       return
     }
     setNouveauPinEdite('')
+    setPinsVisibles((etat) => {
+      const copie = { ...etat }
+      delete copie[cible.id]
+      return copie
+    })
+  }
+
+  // Affiche/masque le code PIN d'un bénévole. Aucune reconfirmation par
+  // code n'est demandée ici : cet écran est déjà réservé aux responsables
+  // connectés, comme pour les autres corrections rapides de l'appli.
+  async function basculerPinVisible(cible) {
+    if (pinsVisibles[cible.id] !== undefined) {
+      setPinsVisibles((etat) => {
+        const copie = { ...etat }
+        delete copie[cible.id]
+        return copie
+      })
+      return
+    }
+    setPinsVisibles((etat) => ({ ...etat, [cible.id]: 'chargement' }))
+    const { data, error } = await supabase.rpc('voir_pin_benevole', {
+      p_benevole_id: benevole.id,
+      p_cible_id: cible.id,
+    })
+    setPinsVisibles((etat) => ({
+      ...etat,
+      [cible.id]: error || !data ? 'indisponible' : data,
+    }))
   }
 
   async function changerStatut(cible) {
@@ -226,7 +257,33 @@ export default function AdminBenevoles({ benevole }) {
             {benevoles.map((b) => (
               <Fragment key={b.id}>
                 <tr>
-                  <td>{b.nom}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{b.nom}</span>
+                      <button
+                        type="button"
+                        className="bouton-icone"
+                        title="Voir le code"
+                        style={{ padding: '2px 7px', fontSize: '0.85rem' }}
+                        onClick={() => basculerPinVisible(b)}
+                      >
+                        👁️
+                      </button>
+                    </div>
+                    {pinsVisibles[b.id] === 'chargement' && (
+                      <div className="code-affiche">Chargement…</div>
+                    )}
+                    {pinsVisibles[b.id] === 'indisponible' && (
+                      <div className="code-affiche indisponible">
+                        Code non disponible — réinitialise-le ci-dessous ✏️
+                      </div>
+                    )}
+                    {pinsVisibles[b.id] &&
+                      pinsVisibles[b.id] !== 'chargement' &&
+                      pinsVisibles[b.id] !== 'indisponible' && (
+                        <div className="code-affiche">Code : {pinsVisibles[b.id]}</div>
+                      )}
+                  </td>
                   <td>
                     <span className={`pastille ${b.role}`}>{b.role}</span>
                   </td>
