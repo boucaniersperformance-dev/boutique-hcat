@@ -7,6 +7,7 @@ import {
   categorieProduit,
   photosProduit,
   stockTotalProduit,
+  comparerTailles,
 } from '../constants.js'
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
@@ -23,6 +24,17 @@ function clePanier(produitId, taille) {
 function produitEnStock(produit) {
   const stock = stockTotalProduit(produit)
   return stock === null || stock > 0
+}
+
+// Tailles à afficher sous le nom du produit, pour éviter d'avoir à
+// l'ouvrir juste pour vérifier ce qui est disponible : uniquement celles
+// encore en stock (stock non suivi = considéré disponible), triées dans
+// l'ordre habituel (XS...XXL puis tranches d'âge / âges précis).
+function taillesDisponibles(produit) {
+  return (produit.variantes_produit || [])
+    .filter((v) => v.taille && (v.stock_qty === null || v.stock_qty === undefined || v.stock_qty > 0))
+    .map((v) => v.taille)
+    .sort(comparerTailles)
 }
 
 const INTERVALLE_CARROUSEL_MS = 3000
@@ -228,6 +240,7 @@ export default function Vente({ benevole }) {
             const photoActuelle = photos.length
               ? photos[tickCarrousel % photos.length]
               : null
+            const tailles = produit.necessite_taille ? taillesDisponibles(produit) : []
             return (
               <button
                 key={produit.id}
@@ -248,6 +261,11 @@ export default function Vente({ benevole }) {
                   {photoActuelle ? <img src={photoActuelle} alt={produit.nom} /> : '🛍️'}
                 </div>
                 <div className="produit-nom">{produit.nom}</div>
+                {produit.necessite_taille && (
+                  <div className="produit-tailles">
+                    {tailles.length > 0 ? tailles.join(' · ') : 'Aucune taille en stock'}
+                  </div>
+                )}
                 <div className="produit-prix">{formatEuros(produit.prix)}</div>
               </button>
             )
