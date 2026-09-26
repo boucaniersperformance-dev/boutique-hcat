@@ -496,6 +496,13 @@ input {
   color: var(--bleu);
 }
 
+.produit-tailles {
+  font-size: 0.72rem;
+  color: var(--texte-clair);
+  line-height: 1.2;
+  margin-top: -4px;
+}
+
 .badge-stock {
   position: absolute;
   top: 8px;
@@ -1115,6 +1122,18 @@ table.tableau-admin .panneau-edition input[type="text"] {
 
 .reference-produit {
   font-size: 0.78rem;
+  color: var(--texte-clair);
+}
+
+.code-affiche {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--bleu);
+  margin-top: 4px;
+}
+
+.code-affiche.indisponible {
+  font-weight: 500;
   color: var(--texte-clair);
 }
 
