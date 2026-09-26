@@ -5,6 +5,7 @@ import Vente from './screens/Vente.jsx'
 import AdminProduits from './screens/AdminProduits.jsx'
 import AdminBenevoles from './screens/AdminBenevoles.jsx'
 import Historique from './screens/Historique.jsx'
+import JeuPalet from './screens/JeuPalet.jsx'
 
 const CLE_SESSION = 'boutique-hcat-session'
 
@@ -78,6 +79,12 @@ export default function App() {
           >
             Vente
           </button>
+          <button
+            className={ecran === 'palet' ? 'actif' : ''}
+            onClick={() => setEcran('palet')}
+          >
+            Jeux du palet
+          </button>
           {estResponsable && (
             <>
               <button
@@ -111,6 +118,7 @@ export default function App() {
 
       <main className="contenu">
         {ecran === 'vente' && <Vente benevole={benevole} />}
+        {ecran === 'palet' && <JeuPalet benevole={benevole} />}
         {ecran === 'produits' && estResponsable && (
           <AdminProduits benevole={benevole} />
         )}
