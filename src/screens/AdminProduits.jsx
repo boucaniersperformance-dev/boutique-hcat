@@ -9,6 +9,7 @@ import {
   AGES_ENFANT,
 } from '../constants.js'
 import RecadrageModal from '../components/RecadrageModal.jsx'
+import { genererRapportStockPdf } from '../lib/rapportStock.js'
 
 const BUCKET_PHOTOS = 'produits-photos'
 
@@ -48,6 +49,10 @@ export default function AdminProduits({ benevole }) {
   const [nouvelleTailleAjout, setNouvelleTailleAjout] = useState('')
   const [erreurAjoutTaille, setErreurAjoutTaille] = useState(null)
   const [actionAjoutTailleEnCours, setActionAjoutTailleEnCours] = useState(false)
+
+  const [impressionOuverte, setImpressionOuverte] = useState(false)
+  const [selectionImpression, setSelectionImpression] = useState({})
+  const [impressionEnCours, setImpressionEnCours] = useState(false)
 
   const charger = useCallback(async () => {
     setErreur(null)
@@ -486,6 +491,65 @@ export default function AdminProduits({ benevole }) {
     charger()
   }
 
+  // Tous les produits imprimables (qu'ils soient actuellement en vente ou
+  // non, archivés ou non) — seule la corbeille (suppression) est exclue,
+  // puisqu'un produit supprimé n'a plus vocation à figurer dans un état
+  // des stocks.
+  const produitsImprimables = useMemo(
+    () =>
+      produits
+        .filter((p) => !p.supprime_le)
+        .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })),
+    [produits]
+  )
+
+  function ouvrirImpression() {
+    setSelectionImpression(
+      Object.fromEntries(produitsImprimables.map((p) => [p.id, true]))
+    )
+    setImpressionOuverte(true)
+  }
+
+  function fermerImpression() {
+    if (impressionEnCours) return
+    setImpressionOuverte(false)
+  }
+
+  function basculerSelectionImpression(id) {
+    setSelectionImpression((etat) => ({ ...etat, [id]: !etat[id] }))
+  }
+
+  const touteSelectionImpression = produitsImprimables.every((p) => selectionImpression[p.id])
+
+  function basculerTouteSelectionImpression() {
+    const nouvelEtat = !touteSelectionImpression
+    setSelectionImpression(
+      Object.fromEntries(produitsImprimables.map((p) => [p.id, nouvelEtat]))
+    )
+  }
+
+  async function genererImpressionStock() {
+    const choisis = produitsImprimables.filter((p) => selectionImpression[p.id])
+    if (choisis.length === 0) return
+    setImpressionEnCours(true)
+    try {
+      const pdfBytes = await genererRapportStockPdf(choisis)
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `stock_boutique_hcat_${new Date().toISOString().slice(0, 10)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      setImpressionOuverte(false)
+    } catch (err) {
+      console.error(err)
+      window.alert("La génération du PDF a échoué. Réessaie.")
+    } finally {
+      setImpressionEnCours(false)
+    }
+  }
+
   if (chargement) return <div className="chargement">Chargement…</div>
   if (erreur) return <p className="erreur">{erreur}</p>
 
@@ -530,7 +594,12 @@ export default function AdminProduits({ benevole }) {
       </div>
 
       <div className="bloc">
-        <h2>Gestion des produits</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <h2 style={{ margin: 0 }}>Gestion des produits</h2>
+          <button type="button" className="bouton-secondaire" onClick={ouvrirImpression}>
+            🖨️ Imprimer le stock
+          </button>
+        </div>
         <p style={{ color: 'var(--texte-clair)' }}>
           Les prix, le stock et les photos se mettent à jour immédiatement pour
           tous les bénévoles. Triés par ordre alphabétique.
@@ -989,6 +1058,77 @@ export default function AdminProduits({ benevole }) {
                 disabled={actionTailleEnCours || !nouvelleTailleTexte.trim()}
               >
                 {actionTailleEnCours ? 'Enregistrement…' : 'Confirmer la correction'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {impressionOuverte && (
+        <div className="fond-modale" onClick={fermerImpression}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>Imprimer le stock</h2>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              Choisis les articles à inclure (en vente ou non, archivés ou
+              non). Un PDF listant leurs tailles et leur stock sera généré.
+            </p>
+            <button
+              type="button"
+              className="bouton-tout-filtres"
+              style={{ marginBottom: 10 }}
+              onClick={basculerTouteSelectionImpression}
+            >
+              {touteSelectionImpression ? 'Tout désélectionner' : 'Tout sélectionner'}
+            </button>
+            <div
+              style={{
+                maxHeight: '45vh',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                border: '1px solid var(--bordure)',
+                borderRadius: 10,
+                padding: 10,
+              }}
+            >
+              {produitsImprimables.map((p) => (
+                <label
+                  key={p.id}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!selectionImpression[p.id]}
+                    onChange={() => basculerSelectionImpression(p.id)}
+                  />
+                  {p.nom}
+                  {p.archive_le && (
+                    <span className="pastille masque" style={{ fontSize: '0.68rem' }}>
+                      archivé
+                    </span>
+                  )}
+                  {!p.actif && !p.archive_le && (
+                    <span className="pastille masque" style={{ fontSize: '0.68rem' }}>
+                      hors vente
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+            <div className="modale-actions">
+              <button className="bouton-secondaire" onClick={fermerImpression} disabled={impressionEnCours}>
+                Annuler
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={genererImpressionStock}
+                disabled={
+                  impressionEnCours ||
+                  produitsImprimables.every((p) => !selectionImpression[p.id])
+                }
+              >
+                {impressionEnCours ? 'Génération…' : '🖨️ Générer le PDF'}
               </button>
             </div>
           </div>
