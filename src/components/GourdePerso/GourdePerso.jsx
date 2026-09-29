@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import logoSrc from './logo-boucaniers.webp';
-import joueurSrc from './joueur-boucaniers.webp';
+import attaquantSrc from './joueur-boucaniers.webp';
+import gardienSrc from './joueur-gardien.webp';
+import paletSrc from './joueur-palet.webp';
+import miseAuJeuSrc from './joueur-mise-au-jeu.webp';
 import {
   NAVY, GOLD, svgApercu, pageImpression, nettoyerPrenom, nettoyerNumero,
 } from './etiquetteGourde';
+
+// Choix de l'illustration (ratio = largeur / hauteur de l'image)
+// Pour en ajouter une : déposer le .webp dans ce dossier, l'importer ci-dessus et l'ajouter ici.
+const POSES = [
+  { id: 'attaquant', nom: 'Attaquant', src: attaquantSrc, ratio: 0.785 },
+  { id: 'palet', nom: 'Conduite de palet', src: paletSrc, ratio: 1.579 },
+  { id: 'gardien', nom: 'Gardien', src: gardienSrc, ratio: 1.482 },
+  { id: 'mise-au-jeu', nom: 'Mise au jeu', src: miseAuJeuSrc, ratio: 1.874 },
+];
 
 const LIEN_POLICE = 'https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap';
 
@@ -36,17 +48,20 @@ const absolu = (src) => new URL(src, window.location.href).href;
 export default function GourdePerso() {
   const [prenom, setPrenom] = useState('');
   const [numero, setNumero] = useState('');
+  const [poseId, setPoseId] = useState(POSES[0].id);
+  const pose = POSES.find((p) => p.id === poseId) || POSES[0];
   const policePrete = useOswald();
 
   const options = useMemo(() => ({
     prenom,
     numero,
     logoUrl: absolu(logoSrc),
-    joueurUrl: absolu(joueurSrc),
+    joueurUrl: absolu(pose.src),
+    joueurRatio: pose.ratio,
     mesurer: creerMesure(),
   // policePrete : on remesure une fois Oswald chargée
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [prenom, numero, policePrete]);
+  }), [prenom, numero, pose, policePrete]);
 
   const apercu = useMemo(() => svgApercu(options), [options]);
 
@@ -109,6 +124,30 @@ export default function GourdePerso() {
             onChange={(e) => setNumero(nettoyerNumero(e.target.value))}
           />
         </label>
+      </div>
+
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Illustration</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+        {POSES.map((p) => {
+          const actif = p.id === pose.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPoseId(p.id)}
+              aria-pressed={actif}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                padding: 6, borderRadius: 10, background: '#fff', color: NAVY,
+                border: actif ? `3px solid ${GOLD}` : '2px solid #d5d9e3',
+                boxShadow: actif ? `0 0 0 2px ${NAVY}` : 'none',
+              }}
+            >
+              <img src={p.src} alt="" style={{ width: '100%', height: 64, objectFit: 'contain' }} />
+              <span style={{ fontSize: 12, fontWeight: actif ? 700 : 500, lineHeight: 1.2 }}>{p.nom}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div
