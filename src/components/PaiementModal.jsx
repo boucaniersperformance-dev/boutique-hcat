@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
 import { formatEuros } from '../constants.js'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 export default function PaiementModal({ total, onValider, onFermer, enCours }) {
+  // La touche/geste "retour" du téléphone referme cette modale (sauf si un
+  // enregistrement est en cours), au lieu de faire quitter l'application.
+  useFermetureRetour(true, () => {
+    if (!enCours) onFermer()
+  })
+
   const [mode, setMode] = useState(null)
   const [montantRecuStr, setMontantRecuStr] = useState('')
 
