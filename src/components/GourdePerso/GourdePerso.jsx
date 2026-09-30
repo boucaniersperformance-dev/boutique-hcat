@@ -49,6 +49,7 @@ export default function GourdePerso() {
   const [prenom, setPrenom] = useState('');
   const [numero, setNumero] = useState('');
   const [poseId, setPoseId] = useState(POSES[0].id);
+  const [stickers, setStickers] = useState(true);
   const pose = POSES.find((p) => p.id === poseId) || POSES[0];
   const policePrete = useOswald();
 
@@ -58,10 +59,11 @@ export default function GourdePerso() {
     logoUrl: absolu(logoSrc),
     joueurUrl: absolu(pose.src),
     joueurRatio: pose.ratio,
+    stickers,
     mesurer: creerMesure(),
   // policePrete : on remesure une fois Oswald chargée
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [prenom, numero, pose, policePrete]);
+  }), [prenom, numero, pose, stickers, policePrete]);
 
   const apercu = useMemo(() => svgApercu(options), [options]);
 
@@ -154,6 +156,16 @@ export default function GourdePerso() {
         style={{ borderRadius: 8, boxShadow: '0 2px 12px rgba(0,17,74,.18)', overflow: 'hidden', background: '#fff' }}
         dangerouslySetInnerHTML={{ __html: apercu }}
       />
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, fontWeight: 600, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={stickers}
+          onChange={(e) => setStickers(e.target.checked)}
+          style={{ width: 20, height: 20, accentColor: NAVY }}
+        />
+        Ajouter 6 petits stickers prénom + numéro (casque, crosse, sac) dans le bas de la feuille
+      </label>
 
       <button
         type="button"

@@ -91,23 +91,67 @@ export function svgApercu(o) {
   <g clip-path="url(#bord)">${contenuEtiquette(o)}</g></svg>`;
 }
 
-/** Page A4 paysage complète, étiquette à taille réelle + traits de coupe. */
+/** Petit sticker prénom + numéro (80 × 28 mm) pour casque, crosse, sac… */
+export const STICKER = { l: 80, h: 28 };
+
+function contenuSticker({ prenom, numero, logoUrl, mesurer = mesureParDefaut }) {
+  const nom = nettoyerPrenom(prenom) || 'PRÉNOM';
+  const num = nettoyerNumero(numero);
+  const { l, h } = STICKER;
+  const cx = 53;
+  const textes = num
+    ? `${texteMaillot({ texte: nom, x: cx, y: 13.2, taille: 10, largeurMax: 44, mesurer })}
+       ${texteMaillot({ texte: '#' + num, x: cx, y: 24.3, taille: 11, largeurMax: 30, mesurer })}`
+    : texteMaillot({ texte: nom, x: cx, y: 18.6, taille: 13, largeurMax: 46, mesurer });
+  return `
+  <rect x="-1.5" y="-1.5" width="${l + 3}" height="${h + 3}" rx="5" fill="none" stroke="#aaa" stroke-width="0.25" stroke-dasharray="1.2 1"/>
+  <rect x="0.6" y="0.6" width="${l - 1.2}" height="${h - 1.2}" rx="3.5" fill="#fff" stroke="${NAVY}" stroke-width="1.2"/>
+  <rect x="2.2" y="2.2" width="${l - 4.4}" height="${h - 4.4}" rx="2.4" fill="none" stroke="${GOLD}" stroke-width="0.5"/>
+  <image href="${echapper(logoUrl)}" x="3.5" y="2.5" width="23" height="23" preserveAspectRatio="xMidYMid meet"/>
+  ${textes}`;
+}
+
+/**
+ * Page A4 paysage : l'étiquette de gourde en haut (taille réelle, traits de coupe)
+ * et, dans la bande libre du bas, 6 petits stickers prénom + numéro.
+ * @param {object} o  mêmes options que contenuEtiquette, plus o.stickers (true par défaut)
+ */
 export function pageImpression(o) {
   const nom = nettoyerPrenom(o.prenom) || 'PRÉNOM';
   const num = nettoyerNumero(o.numero);
-  const ox = 26, oy = 50; // position de l'étiquette sur la feuille (mm)
+  const avecStickers = o.stickers !== false;
+  const ox = 26, oy = 11; // position de l'étiquette sur la feuille (mm)
   const coupe = `
   <g stroke="#999" stroke-width="0.25">
-    <line x1="${ox}" y1="${oy - 10}" x2="${ox}" y2="${oy - 4}"/><line x1="${ox + LARGEUR}" y1="${oy - 10}" x2="${ox + LARGEUR}" y2="${oy - 4}"/>
-    <line x1="${ox}" y1="${oy + HAUTEUR + 4}" x2="${ox}" y2="${oy + HAUTEUR + 10}"/><line x1="${ox + LARGEUR}" y1="${oy + HAUTEUR + 4}" x2="${ox + LARGEUR}" y2="${oy + HAUTEUR + 10}"/>
-    <line x1="${ox - 10}" y1="${oy}" x2="${ox - 4}" y2="${oy}"/><line x1="${ox - 10}" y1="${oy + HAUTEUR}" x2="${ox - 4}" y2="${oy + HAUTEUR}"/>
-    <line x1="${ox + LARGEUR + 4}" y1="${oy}" x2="${ox + LARGEUR + 10}" y2="${oy}"/><line x1="${ox + LARGEUR + 4}" y1="${oy + HAUTEUR}" x2="${ox + LARGEUR + 10}" y2="${oy + HAUTEUR}"/>
+    <line x1="${ox}" y1="${oy - 8}" x2="${ox}" y2="${oy - 3}"/><line x1="${ox + LARGEUR}" y1="${oy - 8}" x2="${ox + LARGEUR}" y2="${oy - 3}"/>
+    <line x1="${ox}" y1="${oy + HAUTEUR + 3}" x2="${ox}" y2="${oy + HAUTEUR + 8}"/><line x1="${ox + LARGEUR}" y1="${oy + HAUTEUR + 3}" x2="${ox + LARGEUR}" y2="${oy + HAUTEUR + 8}"/>
+    <line x1="${ox - 10}" y1="${oy}" x2="${ox - 3}" y2="${oy}"/><line x1="${ox - 10}" y1="${oy + HAUTEUR}" x2="${ox - 3}" y2="${oy + HAUTEUR}"/>
+    <line x1="${ox + LARGEUR + 3}" y1="${oy}" x2="${ox + LARGEUR + 10}" y2="${oy}"/><line x1="${ox + LARGEUR + 3}" y1="${oy + HAUTEUR}" x2="${ox + LARGEUR + 10}" y2="${oy + HAUTEUR}"/>
   </g>`;
-  const legende = echapper(`Gourde ${nom}${num ? ' #' + num : ''} — 245 × 110 mm — imprimer à 100 % (taille réelle), couper aux traits`);
+
+  // Grille de stickers : 3 colonnes × 2 lignes, centrée sous l'étiquette
+  let stickers = '';
+  if (avecStickers) {
+    const ecart = 6, cols = 3, lignes = 2;
+    const x0 = (297 - (cols * STICKER.l + (cols - 1) * ecart)) / 2;
+    const y0 = 133;
+    for (let r = 0; r < lignes; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = x0 + c * (STICKER.l + ecart);
+        const y = y0 + r * (STICKER.h + ecart);
+        stickers += `<g transform="translate(${x},${y})">${contenuSticker(o)}</g>`;
+      }
+    }
+  }
+
+  const legende = echapper(
+    `Gourde ${nom}${num ? ' #' + num : ''} — étiquette 245 × 110 mm${avecStickers ? ' + 6 stickers 80 × 28 mm' : ''} — imprimer à 100 % (taille réelle), couper aux traits`
+  );
   return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210">
   <g transform="translate(${ox},${oy})">${contenuEtiquette(o)}</g>
   ${coupe}
-  <text x="148.5" y="185" font-family="sans-serif" font-size="3.2" fill="#888" text-anchor="middle">${legende}</text>
-  <text x="148.5" y="190" font-family="sans-serif" font-size="2.6" fill="#aaa" text-anchor="middle">Boucaniers Shop · GB-Kréation</text>
+  ${stickers}
+  <text x="148.5" y="${avecStickers ? 201 : 180}" font-family="sans-serif" font-size="2.8" fill="#888" text-anchor="middle">${legende}</text>
+  <text x="148.5" y="${avecStickers ? 205 : 185}" font-family="sans-serif" font-size="2.3" fill="#aaa" text-anchor="middle">Boucaniers Shop · GB-Kréation</text>
 </svg>`;
 }
