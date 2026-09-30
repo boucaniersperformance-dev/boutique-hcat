@@ -693,6 +693,12 @@ input {
   max-width: 640px;
 }
 
+/* Modale d'import de photos en masse : besoin de place pour la liste des
+   fichiers (vignette + sélecteurs produit/type sur une ligne). */
+.modale-large {
+  max-width: 720px;
+}
+
 .ajout-corps {
   display: flex;
   gap: 22px;
