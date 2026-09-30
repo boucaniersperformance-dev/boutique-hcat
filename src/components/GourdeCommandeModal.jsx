@@ -4,6 +4,7 @@ import logoSrc from './GourdePerso/logo-boucaniers.webp'
 import { POSES, trouverPose } from './GourdePerso/poses'
 import { useOswald, creerMesure } from './GourdePerso/police'
 import { svgApercu, nettoyerPrenom, nettoyerNumero } from './GourdePerso/etiquetteGourde'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 // Garde uniquement les chiffres (et un + en tête) d'un numéro de téléphone
 function nettoyerTelephone(t) {
@@ -16,6 +17,7 @@ const telephoneValide = (t) => t.replace(/\D/g, '').length >= 10
 // Modale de commande « Custom Gourde » : prénom, numéro de maillot,
 // illustration, contact du parent, puis ajout au panier ou paiement direct.
 export default function GourdeCommandeModal({ produit, onValider, onValiderEtPayer, onFermer }) {
+  useFermetureRetour(true, onFermer)
   const [prenom, setPrenom] = useState('')
   const [numero, setNumero] = useState('')
   const [poseId, setPoseId] = useState(POSES[0].id)
