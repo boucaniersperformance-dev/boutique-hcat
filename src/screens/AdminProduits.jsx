@@ -10,6 +10,7 @@ import {
 } from '../constants.js'
 import RecadrageModal from '../components/RecadrageModal.jsx'
 import { genererRapportStockPdf } from '../lib/rapportStock.js'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 const BUCKET_PHOTOS = 'produits-photos'
 
@@ -53,6 +54,13 @@ export default function AdminProduits({ benevole }) {
   const [impressionOuverte, setImpressionOuverte] = useState(false)
   const [selectionImpression, setSelectionImpression] = useState({})
   const [impressionEnCours, setImpressionEnCours] = useState(false)
+
+  // La touche/geste "retour" du téléphone referme ces fenêtres au lieu de
+  // faire quitter l'application (RecadrageModal gère déjà ce comportement
+  // pour elle-même).
+  useFermetureRetour(!!tailleAModifier, fermerModificationTaille)
+  useFermetureRetour(impressionOuverte, fermerImpression)
+  useFermetureRetour(!!produitAjoutTaille, fermerAjoutTaille)
 
   const charger = useCallback(async () => {
     setErreur(null)
