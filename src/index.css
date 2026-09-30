@@ -1197,3 +1197,62 @@ table.tableau-admin .panneau-edition input[type="text"] {
   padding: 10px 16px;
   font-weight: 700;
 }
+
+/* Historique des ventes groupé par jour : une ligne cliquable par jour,
+   qui déplie le détail des ventes de ce jour-là en dessous. */
+.liste-jours {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.jour-vente {
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--carte);
+}
+
+.jour-vente-entete {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  flex-wrap: wrap;
+}
+
+.jour-vente-entete:active {
+  background: var(--fond);
+}
+
+.jour-vente-date {
+  font-weight: 700;
+  color: var(--bleu);
+}
+
+.jour-vente-resume {
+  font-weight: 600;
+  color: var(--texte-clair);
+  margin-left: auto;
+}
+
+.jour-vente-fleche {
+  color: var(--texte-clair);
+  font-size: 0.75rem;
+}
+
+.jour-vente-detail {
+  overflow-x: auto;
+  padding: 0 16px 12px;
+  border-top: 1px solid var(--bordure);
+}
+
+.jour-vente-detail table.tableau-admin {
+  margin-top: 4px;
+}
