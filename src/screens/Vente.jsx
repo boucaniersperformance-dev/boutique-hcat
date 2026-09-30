@@ -204,6 +204,7 @@ export default function Vente({ benevole }) {
         p_illustration: g.illustration,
         p_contact_nom: g.contact_nom,
         p_contact_tel: g.contact_tel,
+        p_stickers: g.stickers !== false,
       })
       if (errGourde) gourdesEnEchec.push(g)
     }
@@ -333,7 +334,8 @@ export default function Vente({ benevole }) {
                   {l.gourde && (
                     <span className="panier-ligne-detail" style={{ fontWeight: 700, color: 'var(--bleu)' }}>
                       {l.gourde.prenom}
-                      {l.gourde.numero ? ` #${l.gourde.numero}` : ''} · {trouverPose(l.gourde.illustration).nom}
+                      {l.gourde.numero ? ` #${l.gourde.numero}` : ''} · {trouverPose(l.gourde.illustration).nom} ·{' '}
+                      {l.gourde.stickers === false ? 'sans stickers' : '+ 6 stickers'}
                       <br />
                       Contact : {l.gourde.contact_nom} · {l.gourde.contact_tel}
                     </span>
@@ -432,7 +434,8 @@ export default function Vente({ benevole }) {
                           {g.prenom}
                           {g.numero ? ` #${g.numero}` : ''}
                         </b>{' '}
-                        · {trouverPose(g.illustration).nom} · {g.contact_nom} · {g.contact_tel}
+                        · {trouverPose(g.illustration).nom} · {g.stickers === false ? 'sans stickers' : '+ 6 stickers'} ·{' '}
+                        {g.contact_nom} · {g.contact_tel}
                       </p>
                     ))}
                   </div>
