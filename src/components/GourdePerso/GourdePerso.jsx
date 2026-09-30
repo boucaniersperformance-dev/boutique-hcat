@@ -56,6 +56,7 @@ export default function GourdePerso({ benevole }) {
     setPrenom(commande.prenom || '');
     setNumero(commande.numero || '');
     setPoseId(POSES.some((p) => p.id === commande.illustration) ? commande.illustration : POSES[0].id);
+    setStickers(commande.stickers !== false);
     setCommandeActive(commande);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -148,7 +149,8 @@ export default function GourdePerso({ benevole }) {
                     {c.prenom}
                     {c.numero ? ` #${c.numero}` : ''}{' '}
                     <span style={{ fontWeight: 500, opacity: 0.7 }}>
-                      · {(POSES.find((p) => p.id === c.illustration) || POSES[0]).nom}
+                      · {(POSES.find((p) => p.id === c.illustration) || POSES[0]).nom} ·{' '}
+                      {c.stickers === false ? 'sans stickers' : '+ 6 stickers'}
                     </span>
                   </div>
                   <div style={{ fontSize: 14, opacity: 0.85 }}>
