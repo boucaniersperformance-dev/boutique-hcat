@@ -6,6 +6,9 @@ import { genererRapportPaletPdf } from '../lib/rapportPalet.js'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 const PRIX_PALET = 2
+// Le tableau physique ne compte que 81 palets, numérotés de 00 à 80.
+const NUMERO_PALET_MAX = 80
+const CASES_PALET = Array.from({ length: NUMERO_PALET_MAX + 1 }, (_, n) => n)
 
 function aujourdHui() {
   return new Date().toISOString().slice(0, 10)
@@ -13,6 +16,10 @@ function aujourdHui() {
 
 function cleLigne() {
   return Math.random().toString(36).slice(2)
+}
+
+function deuxChiffres(n) {
+  return String(n).padStart(2, '0')
 }
 
 // Écran "Jeux du palet" : accessible à tous les bénévoles (pas seulement
@@ -71,20 +78,30 @@ export default function JeuPalet({ benevole }) {
     [panier]
   )
 
+  function choisirNumero(n) {
+    setErreurAjout(null)
+    // Cliquer sur le numéro déjà sélectionné le désélectionne.
+    setNumero((actuel) => (actuel !== '' && parseInt(actuel, 10) === n ? '' : String(n)))
+  }
+
   function ajouterAuPanier(e) {
     e.preventDefault()
     setErreurAjout(null)
     const numeroInt = parseInt(numero, 10)
-    if (!numero || Number.isNaN(numeroInt) || numeroInt <= 0) {
-      setErreurAjout('Le numéro de palet doit être un nombre positif.')
+    if (numero === '' || Number.isNaN(numeroInt)) {
+      setErreurAjout('Choisis un numéro de palet libre dans le tableau ci-dessous.')
+      return
+    }
+    if (numeroInt < 0 || numeroInt > NUMERO_PALET_MAX) {
+      setErreurAjout(`Le numéro de palet doit être compris entre 00 et ${NUMERO_PALET_MAX}.`)
       return
     }
     if (!nom.trim()) {
       setErreurAjout('Le nom et prénom sont obligatoires.')
       return
     }
-    if (numerosDansLePanier.has(numeroInt)) {
-      setErreurAjout('Ce numéro est déjà dans le panier en attente de paiement.')
+    if (numerosDejaVendus.has(numeroInt) || numerosDansLePanier.has(numeroInt)) {
+      setErreurAjout('Ce numéro vient déjà d\'être pris — choisis-en un autre dans le tableau.')
       return
     }
     setPanier((lignes) => [
@@ -163,23 +180,56 @@ export default function JeuPalet({ benevole }) {
       <div className="bloc">
         <h2>🎯 Jeux du palet</h2>
         <p style={{ color: 'var(--texte-clair)' }}>
-          2 € le numéro. Saisis un numéro de palet par acheteur, tu peux en
-          ajouter plusieurs avant d'encaisser en une seule fois.
+          2 € le numéro, de 00 à {deuxChiffres(NUMERO_PALET_MAX)}. Clique sur un
+          numéro libre dans le tableau, renseigne l'acheteur puis ajoute-le au
+          panier — plusieurs numéros peuvent être ajoutés avant d'encaisser en
+          une seule fois.
         </p>
-        <form className="formulaire-inline" onSubmit={ajouterAuPanier}>
+
+        <div className="grille-palets-legende">
+          <span><i className="pastille-legende" /> Disponible</span>
+          <span><i className="pastille-legende en-panier" /> Dans le panier</span>
+          <span><i className="pastille-legende vendu" /> Déjà vendu aujourd'hui</span>
+        </div>
+
+        <div className="grille-palets">
+          {CASES_PALET.map((n) => {
+            const vendu = numerosDejaVendus.has(n)
+            const enPanier = numerosDansLePanier.has(n)
+            const selectionne = numero !== '' && parseInt(numero, 10) === n
+            const indisponible = vendu || enPanier
+            const ligneVendue = vendu ? journal.find((l) => l.numero_palet === n) : null
+            return (
+              <button
+                key={n}
+                type="button"
+                className={
+                  'case-palet' +
+                  (selectionne ? ' selectionne' : '') +
+                  (vendu ? ' vendu' : '') +
+                  (enPanier ? ' en-panier' : '')
+                }
+                disabled={indisponible}
+                onClick={() => choisirNumero(n)}
+                title={
+                  ligneVendue
+                    ? `Déjà vendu aujourd'hui — ${ligneVendue.nom}`
+                    : enPanier
+                    ? 'Dans le panier, en attente de paiement'
+                    : undefined
+                }
+              >
+                {deuxChiffres(n)}
+              </button>
+            )
+          })}
+        </div>
+
+        <form className="formulaire-inline" onSubmit={ajouterAuPanier} style={{ marginTop: 16 }}>
           <div className="champ">
-            <label>Numéro de palet</label>
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={numero}
-              onChange={(e) => setNumero(e.target.value)}
-              placeholder="Ex : 47"
-            />
-          </div>
-          <div className="champ">
-            <label>Nom et prénom</label>
+            <label>
+              Nom et prénom {numero !== '' && `(numéro ${deuxChiffres(parseInt(numero, 10))})`}
+            </label>
             <input
               type="text"
               value={nom}
@@ -197,17 +247,10 @@ export default function JeuPalet({ benevole }) {
               placeholder="Ex : 0612345678"
             />
           </div>
-          <button className="bouton-principal" type="submit">
-            + Ajouter
+          <button className="bouton-principal" type="submit" disabled={numero === ''}>
+            {numero !== '' ? `+ Ajouter le n°${deuxChiffres(parseInt(numero, 10))}` : '+ Ajouter'}
           </button>
         </form>
-        {numero &&
-          !Number.isNaN(parseInt(numero, 10)) &&
-          numerosDejaVendus.has(parseInt(numero, 10)) && (
-            <p className="erreur" style={{ marginTop: 6 }}>
-              ⚠️ Le numéro {numero} a déjà été vendu aujourd'hui — vérifie avant de continuer.
-            </p>
-          )}
         {erreurAjout && <p className="erreur">{erreurAjout}</p>}
       </div>
 
