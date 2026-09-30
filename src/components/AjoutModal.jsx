@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react'
 import { formatEuros, taillesPourJeu, SEUIL_STOCK_BAS, photosProduit } from '../constants.js'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 // Modale d'ajout au panier : demande la taille (si nécessaire) puis la quantité.
 export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFermer }) {
+  // La touche/geste "retour" du téléphone referme cette modale au lieu de
+  // faire quitter l'application.
+  useFermetureRetour(true, onFermer)
+
   const tailles = useMemo(
     () => (produit.necessite_taille ? taillesPourJeu(produit.jeu_tailles) : []),
     [produit]
