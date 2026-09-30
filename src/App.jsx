@@ -126,7 +126,7 @@ export default function App() {
       <main className="contenu">
         {ecran === 'vente' && <Vente benevole={benevole} />}
         {ecran === 'palet' && <JeuPalet benevole={benevole} />}
-        {ecran === 'gourde' && <GourdePerso />}
+        {ecran === 'gourde' && <GourdePerso benevole={benevole} />}
         {ecran === 'produits' && estResponsable && (
           <AdminProduits benevole={benevole} />
         )}
