@@ -55,12 +55,19 @@ export default function AdminProduits({ benevole }) {
   const [selectionImpression, setSelectionImpression] = useState({})
   const [impressionEnCours, setImpressionEnCours] = useState(false)
 
+  const [importOuvert, setImportOuvert] = useState(false)
+  const [importLignes, setImportLignes] = useState([]) // [{ id, fichier, apercu, nomFichier, produitId, type }]
+  const [importEnCours, setImportEnCours] = useState(false)
+  const [importProgression, setImportProgression] = useState({ fait: 0, total: 0 })
+  const [importResultats, setImportResultats] = useState(null) // { reussies, ignorees, echouees: [{nomFichier, raison}] }
+
   // La touche/geste "retour" du téléphone referme ces fenêtres au lieu de
   // faire quitter l'application (RecadrageModal gère déjà ce comportement
   // pour elle-même).
   useFermetureRetour(!!tailleAModifier, fermerModificationTaille)
   useFermetureRetour(impressionOuverte, fermerImpression)
   useFermetureRetour(!!produitAjoutTaille, fermerAjoutTaille)
+  useFermetureRetour(importOuvert, fermerImport)
 
   const charger = useCallback(async () => {
     setErreur(null)
@@ -558,6 +565,221 @@ export default function AdminProduits({ benevole }) {
     }
   }
 
+  // --- Import de photos en masse ---
+  //
+  // Enlève les accents et la ponctuation pour comparer des mots simples
+  // (ex : "brodée" -> "brodee"), sans dépendre de la façon exacte dont le
+  // nom a été tapé.
+  function normaliserTexte(s) {
+    return (s || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+  }
+
+  const SUFFIXES_PRINCIPALE = ['face', 'f', 'devant', 'avant']
+  const SUFFIXES_SUPPLEMENTAIRE = ['dos', 'd', 'arriere', 'back']
+
+  // Devine, à partir du nom du fichier, s'il s'agit de la photo principale
+  // ("... face.jpg", "... f.jpg") ou d'une photo supplémentaire
+  // ("... dos.jpg", "... d.jpg"), et renvoie les mots restants (sans ce
+  // suffixe) pour deviner le produit correspondant.
+  function analyserNomFichier(nomFichier) {
+    const sansExtension = nomFichier.replace(/\.[^.]+$/, '')
+    const mots = normaliserTexte(sansExtension).split(' ').filter(Boolean)
+    let type = 'principale'
+    if (mots.length > 1) {
+      const dernier = mots[mots.length - 1]
+      if (SUFFIXES_SUPPLEMENTAIRE.includes(dernier)) {
+        type = 'supplementaire'
+        mots.pop()
+      } else if (SUFFIXES_PRINCIPALE.includes(dernier)) {
+        type = 'principale'
+        mots.pop()
+      }
+    }
+    return { mots, type }
+  }
+
+  // Propose le produit dont le nom partage le plus de mots avec le fichier
+  // (comparaison approximative) — à vérifier/corriger par le bénévole avant
+  // l'import, ce n'est qu'une suggestion de départ.
+  function meilleurProduitPour(mots, produitsCandidats) {
+    const ensembleFichier = new Set(mots)
+    if (ensembleFichier.size === 0) return null
+    let meilleur = null
+    let meilleurScore = 0
+    for (const p of produitsCandidats) {
+      const motsProduit = new Set(normaliserTexte(p.nom).split(' ').filter(Boolean))
+      if (motsProduit.size === 0) continue
+      let intersection = 0
+      for (const m of ensembleFichier) {
+        if (motsProduit.has(m)) intersection += 1
+      }
+      const union = new Set([...ensembleFichier, ...motsProduit]).size
+      const score = union === 0 ? 0 : intersection / union
+      if (score > meilleurScore) {
+        meilleurScore = score
+        meilleur = p
+      }
+    }
+    return meilleurScore >= 0.25 ? meilleur : null
+  }
+
+  function ouvrirImport() {
+    setImportResultats(null)
+    setImportLignes([])
+    setImportOuvert(true)
+  }
+
+  function fermerImport() {
+    if (importEnCours) return
+    importLignes.forEach((l) => URL.revokeObjectURL(l.apercu))
+    setImportOuvert(false)
+    setImportLignes([])
+    setImportResultats(null)
+  }
+
+  function onChoixFichiersImport(e) {
+    const fichiers = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (fichiers.length === 0) return
+    const nouvellesLignes = fichiers.map((fichier, index) => {
+      const { mots, type } = analyserNomFichier(fichier.name)
+      const suggestion = meilleurProduitPour(mots, produitsImprimables)
+      return {
+        id: `${Date.now()}-${index}-${fichier.name}`,
+        fichier,
+        apercu: URL.createObjectURL(fichier),
+        nomFichier: fichier.name,
+        produitId: suggestion ? suggestion.id : '',
+        type,
+      }
+    })
+    setImportLignes((lignes) => [...lignes, ...nouvellesLignes])
+  }
+
+  function changerProduitImport(id, produitId) {
+    setImportLignes((lignes) => lignes.map((l) => (l.id === id ? { ...l, produitId } : l)))
+  }
+
+  function changerTypeImport(id, type) {
+    setImportLignes((lignes) => lignes.map((l) => (l.id === id ? { ...l, type } : l)))
+  }
+
+  function retirerLigneImport(id) {
+    setImportLignes((lignes) => {
+      const ligne = lignes.find((l) => l.id === id)
+      if (ligne) URL.revokeObjectURL(ligne.apercu)
+      return lignes.filter((l) => l.id !== id)
+    })
+  }
+
+  const importPretes = importLignes.filter((l) => l.produitId)
+
+  const TAILLE_MAX_IMPORT = 1400
+
+  // Convertit le fichier choisi (quel que soit son format) en JPEG prêt à
+  // envoyer : redimensionné si besoin, et surtout démarré sur un fond
+  // BLANC avant d'y dessiner la photo — comme dans RecadrageModal — pour
+  // qu'une éventuelle zone transparente ne devienne jamais noire à
+  // l'export (un JPEG ne gère pas la transparence).
+  function fichierVersBlobJpeg(fichier) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(fichier)
+      const img = new Image()
+      img.onload = () => {
+        const ratio = Math.min(1, TAILLE_MAX_IMPORT / Math.max(img.naturalWidth, img.naturalHeight))
+        const largeur = Math.max(1, Math.round(img.naturalWidth * ratio))
+        const hauteur = Math.max(1, Math.round(img.naturalHeight * ratio))
+        const canvas = document.createElement('canvas')
+        canvas.width = largeur
+        canvas.height = hauteur
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, largeur, hauteur)
+        ctx.drawImage(img, 0, 0, largeur, hauteur)
+        URL.revokeObjectURL(url)
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error('Conversion échouée'))),
+          'image/jpeg',
+          0.88
+        )
+      }
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        reject(new Error('Image illisible'))
+      }
+      img.src = url
+    })
+  }
+
+  async function televerserPhotoImport(produit, blob, type) {
+    const chemin =
+      type === 'supplementaire'
+        ? `${produit.id}-extra-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`
+        : `${produit.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`
+    const { error: erreurUpload } = await supabase.storage
+      .from(BUCKET_PHOTOS)
+      .upload(chemin, blob, { upsert: true, contentType: 'image/jpeg' })
+    if (erreurUpload) throw new Error("Échec de l'envoi")
+
+    const { data: urlPublique } = supabase.storage.from(BUCKET_PHOTOS).getPublicUrl(chemin)
+
+    if (type === 'supplementaire') {
+      const { error } = await supabase.rpc('ajouter_photo_produit', {
+        p_benevole_id: benevole.id,
+        p_produit_id: produit.id,
+        p_url: urlPublique.publicUrl,
+      })
+      if (error) throw new Error("Échec de l'ajout de la photo")
+    } else {
+      const { error } = await supabase.rpc('modifier_produit', {
+        p_benevole_id: benevole.id,
+        p_produit_id: produit.id,
+        p_prix: produit.prix,
+        p_actif: produit.actif,
+        p_photo_url: urlPublique.publicUrl,
+      })
+      if (error) throw new Error("Échec de l'enregistrement")
+    }
+  }
+
+  async function lancerImport() {
+    const lignes = importLignes.filter((l) => l.produitId)
+    if (lignes.length === 0) return
+    const ignorees = importLignes.length - lignes.length
+    setImportEnCours(true)
+    setImportProgression({ fait: 0, total: lignes.length })
+    const echouees = []
+    let reussies = 0
+
+    for (const ligne of lignes) {
+      const produitCible = produits.find((p) => p.id === ligne.produitId)
+      if (!produitCible) {
+        echouees.push({ nomFichier: ligne.nomFichier, raison: 'Produit introuvable' })
+        setImportProgression((p) => ({ ...p, fait: p.fait + 1 }))
+        continue
+      }
+      try {
+        const blob = await fichierVersBlobJpeg(ligne.fichier)
+        await televerserPhotoImport(produitCible, blob, ligne.type)
+        reussies += 1
+      } catch (err) {
+        echouees.push({ nomFichier: ligne.nomFichier, raison: err.message || 'Échec' })
+      }
+      setImportProgression((p) => ({ ...p, fait: p.fait + 1 }))
+    }
+
+    importLignes.forEach((l) => URL.revokeObjectURL(l.apercu))
+    setImportLignes([])
+    setImportEnCours(false)
+    setImportResultats({ reussies, ignorees, echouees })
+    charger()
+  }
+
   if (chargement) return <div className="chargement">Chargement…</div>
   if (erreur) return <p className="erreur">{erreur}</p>
 
@@ -604,9 +826,14 @@ export default function AdminProduits({ benevole }) {
       <div className="bloc">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <h2 style={{ margin: 0 }}>Gestion des produits</h2>
-          <button type="button" className="bouton-secondaire" onClick={ouvrirImpression}>
-            🖨️ Imprimer le stock
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="bouton-secondaire" onClick={ouvrirImport}>
+              📸 Importer des photos en masse
+            </button>
+            <button type="button" className="bouton-secondaire" onClick={ouvrirImpression}>
+              🖨️ Imprimer le stock
+            </button>
+          </div>
         </div>
         <p style={{ color: 'var(--texte-clair)' }}>
           Les prix, le stock et les photos se mettent à jour immédiatement pour
@@ -1138,6 +1365,168 @@ export default function AdminProduits({ benevole }) {
               >
                 {impressionEnCours ? 'Génération…' : '🖨️ Générer le PDF'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importOuvert && (
+        <div className="fond-modale" onClick={fermerImport}>
+          <div className="modale modale-large" onClick={(e) => e.stopPropagation()}>
+            <h2>Importer des photos en masse</h2>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              Sélectionne plusieurs photos d'un coup : chacune est associée
+              automatiquement au produit dont le nom se rapproche le plus —
+              vérifie et corrige la liste ci-dessous avant d'importer. Un nom
+              de fichier finissant par « face » ou « f » remplace la photo
+              principale ; un nom finissant par « dos » ou « d » ajoute une
+              photo supplémentaire.
+            </p>
+
+            {!importResultats && (
+              <>
+                <label
+                  className="bouton-secondaire"
+                  style={{ display: 'inline-block', cursor: 'pointer' }}
+                >
+                  + Choisir des photos
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={importEnCours}
+                    onChange={onChoixFichiersImport}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+
+                {importLignes.length > 0 && (
+                  <>
+                    <p style={{ marginTop: 12, marginBottom: 8, fontSize: '0.85rem', color: 'var(--texte-clair)' }}>
+                      {importLignes.length} photo(s) sélectionnée(s) — {importPretes.length} associée(s) à un produit.
+                    </p>
+                    <div
+                      style={{
+                        maxHeight: '45vh',
+                        overflowY: 'auto',
+                        border: '1px solid var(--bordure)',
+                        borderRadius: 10,
+                        padding: 8,
+                      }}
+                    >
+                      {importLignes.map((ligne) => (
+                        <div
+                          key={ligne.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 0',
+                            borderBottom: '1px solid var(--bordure)',
+                          }}
+                        >
+                          <img
+                            src={ligne.apercu}
+                            alt=""
+                            style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontSize: '0.75rem',
+                                color: 'var(--texte-clair)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={ligne.nomFichier}
+                            >
+                              {ligne.nomFichier}
+                            </div>
+                            <select
+                              value={ligne.produitId}
+                              disabled={importEnCours}
+                              onChange={(e) => changerProduitImport(ligne.id, e.target.value)}
+                              style={{ width: '100%', marginTop: 2 }}
+                            >
+                              <option value="">— Choisir un produit —</option>
+                              {produitsImprimables.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nom}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <select
+                            value={ligne.type}
+                            disabled={importEnCours}
+                            onChange={(e) => changerTypeImport(ligne.id, e.target.value)}
+                            style={{ width: 108, flexShrink: 0 }}
+                          >
+                            <option value="principale">Principale</option>
+                            <option value="supplementaire">Suppl.</option>
+                          </select>
+                          <button
+                            type="button"
+                            className="bouton-icone"
+                            title="Retirer cette photo de l'import"
+                            disabled={importEnCours}
+                            onClick={() => retirerLigneImport(ligne.id)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {importEnCours && (
+                  <p style={{ marginTop: 10, fontWeight: 700, color: 'var(--bleu)' }}>
+                    Import en cours… {importProgression.fait} / {importProgression.total}
+                  </p>
+                )}
+              </>
+            )}
+
+            {importResultats && (
+              <div>
+                <p style={{ fontWeight: 700, color: 'var(--vert)' }}>
+                  ✅ {importResultats.reussies} photo(s) importée(s) avec succès.
+                </p>
+                {importResultats.ignorees > 0 && (
+                  <p style={{ color: 'var(--texte-clair)' }}>
+                    {importResultats.ignorees} photo(s) ignorée(s) (aucun produit choisi).
+                  </p>
+                )}
+                {importResultats.echouees.length > 0 && (
+                  <>
+                    <p className="erreur">{importResultats.echouees.length} échec(s) :</p>
+                    <ul style={{ fontSize: '0.85rem', color: 'var(--rouge)' }}>
+                      {importResultats.echouees.map((e, i) => (
+                        <li key={i}>
+                          {e.nomFichier} — {e.raison}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="modale-actions">
+              <button className="bouton-secondaire" onClick={fermerImport} disabled={importEnCours}>
+                {importResultats ? 'Fermer' : 'Annuler'}
+              </button>
+              {!importResultats && (
+                <button
+                  className="bouton-principal"
+                  onClick={lancerImport}
+                  disabled={importEnCours || importPretes.length === 0}
+                >
+                  {importEnCours ? 'Import en cours…' : `Importer ${importPretes.length} photo(s)`}
+                </button>
+              )}
             </div>
           </div>
         </div>
