@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { formatEuros } from '../constants.js'
 import PaiementModal from '../components/PaiementModal.jsx'
 import { genererRapportPaletPdf } from '../lib/rapportPalet.js'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 const PRIX_PALET = 2
 
@@ -35,6 +36,11 @@ export default function JeuPalet({ benevole }) {
   const [chargementJournal, setChargementJournal] = useState(true)
   const [erreurJournal, setErreurJournal] = useState(null)
   const [impressionEnCours, setImpressionEnCours] = useState(false)
+
+  // La touche/geste "retour" du téléphone referme l'écran de succès au lieu
+  // de faire quitter l'application (PaiementModal gère déjà ce comportement
+  // pour elle-même).
+  useFermetureRetour(!!succes, () => setSucces(null))
 
   const chargerJournal = useCallback(async () => {
     setChargementJournal(true)
