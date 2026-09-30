@@ -13,8 +13,16 @@ import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
 import EncartMatch from '../components/EncartMatch.jsx'
 import GourdeCommandeModal from '../components/GourdeCommandeModal.jsx'
+import PaletCommandeModal from '../components/PaletCommandeModal.jsx'
 import { estProduitGourde, trouverPose } from '../components/GourdePerso/poses'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
+
+// Nom exact du produit qui déclenche le formulaire de choix du numéro de
+// palet, comme estProduitGourde pour Custom Gourde.
+const NOM_PRODUIT_PALET = 'Jeux du palet'
+function estProduitPalet(produit) {
+  return (produit?.nom || '').trim().toLowerCase() === NOM_PRODUIT_PALET.toLowerCase()
+}
 
 function clePanier(produitId, taille) {
   return `${produitId}|${taille || ''}`
@@ -52,12 +60,14 @@ export default function Vente({ benevole }) {
   )
   const [produitOuvert, setProduitOuvert] = useState(null)
   const [gourdeOuverte, setGourdeOuverte] = useState(null)
+  const [paletOuvert, setPaletOuvert] = useState(null)
   const [paiementOuvert, setPaiementOuvert] = useState(false)
   const [enregistrement, setEnregistrement] = useState(false)
   const [succes, setSucces] = useState(null)
   const [erreurVente, setErreurVente] = useState(null)
   const [tickCarrousel, setTickCarrousel] = useState(0)
   const [matchCourant, setMatchCourant] = useState(null)
+  const [journalPaletDuJour, setJournalPaletDuJour] = useState([])
 
   useFermetureRetour(!!succes, () => setSucces(null))
 
@@ -88,6 +98,37 @@ export default function Vente({ benevole }) {
   useEffect(() => {
     chargerProduits()
   }, [chargerProduits])
+
+  // Numéros de palet déjà vendus aujourd'hui (tous circuits confondus —
+  // page Vente et onglet dédié), pour griser le tableau de la modale de
+  // choix. Rechargé à l'ouverture de la modale pour rester à jour même si
+  // une autre tablette vient de vendre un numéro.
+  const chargerJournalPalet = useCallback(async () => {
+    const aujourdHui = new Date().toISOString().slice(0, 10)
+    const { data, error } = await supabase.rpc('lister_ventes_palet', {
+      p_benevole_id: benevole.id,
+      p_date_debut: aujourdHui,
+      p_date_fin: aujourdHui,
+    })
+    if (!error) setJournalPaletDuJour(data || [])
+  }, [benevole.id])
+
+  useEffect(() => {
+    chargerJournalPalet()
+  }, [chargerJournalPalet])
+
+  useEffect(() => {
+    if (paletOuvert) chargerJournalPalet()
+  }, [paletOuvert, chargerJournalPalet])
+
+  const numerosPaletDejaVendus = useMemo(
+    () => new Set(journalPaletDuJour.map((l) => l.numero_palet)),
+    [journalPaletDuJour]
+  )
+  const numerosPaletDansLePanier = useMemo(
+    () => new Set(panier.filter((l) => l.palet).map((l) => l.palet.numero)),
+    [panier]
+  )
 
   function ajouterLigneAuPanier(produit, { taille, quantite }) {
     const variante = (produit.variantes_produit || []).find(
@@ -150,8 +191,30 @@ export default function Vente({ benevole }) {
     if (payer) setPaiementOuvert(true)
   }
 
+  // Numéro de « Jeux du palet » : une ligne de panier par numéro, avec
+  // son détail (enregistré dans palet_lignes après l'encaissement).
+  function ajouterCommandePalet(produit, details, payer) {
+    const variante = (produit.variantes_produit || []).find((v) => !v.taille)
+    setPanier((lignes) => [
+      ...lignes,
+      {
+        cle: `palet|${Date.now()}|${details.numero}`,
+        produit_id: produit.id,
+        variante_id: variante ? variante.id : null,
+        nom: produit.nom,
+        taille: null,
+        quantite: 1,
+        prix_unitaire: produit.prix,
+        palet: details,
+      },
+    ])
+    setPaletOuvert(null)
+    if (payer) setPaiementOuvert(true)
+  }
+
   function ouvrirProduit(produit) {
     if (estProduitGourde(produit)) setGourdeOuverte(produit)
+    else if (estProduitPalet(produit)) setPaletOuvert(produit)
     else setProduitOuvert(produit)
   }
 
@@ -212,6 +275,21 @@ export default function Vente({ benevole }) {
       if (errGourde) gourdesEnEchec.push(g)
     }
 
+    // Numéros de palet choisis dans le panier, rattachés eux aussi à la
+    // vente qui vient d'être enregistrée.
+    const commandesPalet = panier.filter((l) => l.palet).map((l) => l.palet)
+    const paletsEnEchec = []
+    for (const p of commandesPalet) {
+      const { error: errPalet } = await supabase.rpc('enregistrer_ligne_palet', {
+        p_benevole_id: benevole.id,
+        p_vente_id: resultat?.vente_id ?? null,
+        p_numero_palet: p.numero,
+        p_nom: p.nom,
+        p_telephone: p.telephone || null,
+      })
+      if (errPalet) paletsEnEchec.push(p)
+    }
+
     setPaiementOuvert(false)
     setSucces({
       mode,
@@ -219,9 +297,12 @@ export default function Vente({ benevole }) {
       monnaie: resultat?.monnaie ?? null,
       gourdes: commandesGourde.length,
       gourdesEnEchec,
+      palets: commandesPalet.length,
+      paletsEnEchec,
     })
     setPanier([])
     chargerProduits()
+    chargerJournalPalet()
   }
 
   const comptesParCategorie = useMemo(() => {
@@ -343,6 +424,12 @@ export default function Vente({ benevole }) {
                       Contact : {l.gourde.contact_nom} · {l.gourde.contact_tel}
                     </span>
                   )}
+                  {l.palet && (
+                    <span className="panier-ligne-detail" style={{ fontWeight: 700, color: 'var(--bleu)' }}>
+                      N° {String(l.palet.numero).padStart(2, '0')} — {l.palet.nom}
+                      {l.palet.telephone ? ` · ${l.palet.telephone}` : ''}
+                    </span>
+                  )}
                   <span className="panier-ligne-detail">
                     {l.taille ? `Taille ${l.taille} · ` : ''}
                     {formatEuros(l.prix_unitaire)} × {l.quantite} ={' '}
@@ -350,7 +437,7 @@ export default function Vente({ benevole }) {
                   </span>
                 </div>
                 <div className="panier-ligne-actions">
-                  {!l.gourde && (
+                  {!l.gourde && !l.palet && (
                     <div className="pas-a-pas">
                       <button onClick={() => modifierQuantite(l.cle, -1)}>−</button>
                       <span>{l.quantite}</span>
@@ -399,6 +486,17 @@ export default function Vente({ benevole }) {
           />
         )}
 
+        {paletOuvert && (
+          <PaletCommandeModal
+            produit={paletOuvert}
+            numerosDejaVendus={numerosPaletDejaVendus}
+            numerosDansLePanier={numerosPaletDansLePanier}
+            onFermer={() => setPaletOuvert(null)}
+            onValider={(details) => ajouterCommandePalet(paletOuvert, details, false)}
+            onValiderEtPayer={(details) => ajouterCommandePalet(paletOuvert, details, true)}
+          />
+        )}
+
         {paiementOuvert && (
           <PaiementModal
             total={total}
@@ -439,6 +537,26 @@ export default function Vente({ benevole }) {
                         </b>{' '}
                         · {trouverPose(g.illustration).nom} · {g.stickers === false ? 'sans stickers' : '+ 6 stickers'} ·{' '}
                         {g.contact_nom} · {g.contact_tel}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {succes.palets > 0 && succes.paletsEnEchec.length === 0 && (
+                  <p>
+                    🎯 {succes.palets} numéro{succes.palets > 1 ? 's' : ''} de palet enregistré
+                    {succes.palets > 1 ? 's' : ''}.
+                  </p>
+                )}
+                {succes.paletsEnEchec.length > 0 && (
+                  <div className="erreur" style={{ textAlign: 'left' }}>
+                    <p>
+                      La vente est bien enregistrée, mais l'enregistrement d'un ou plusieurs
+                      numéros de palet a échoué. Note ces informations sur papier :
+                    </p>
+                    {succes.paletsEnEchec.map((p, i) => (
+                      <p key={i}>
+                        <b>N° {String(p.numero).padStart(2, '0')}</b> — {p.nom}
+                        {p.telephone ? ` · ${p.telephone}` : ''}
                       </p>
                     ))}
                   </div>
