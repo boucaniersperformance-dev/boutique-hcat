@@ -21,6 +21,7 @@ export default function GourdeCommandeModal({ produit, onValider, onValiderEtPay
   const [poseId, setPoseId] = useState(POSES[0].id)
   const [contactNom, setContactNom] = useState('')
   const [contactTel, setContactTel] = useState('')
+  const [stickers, setStickers] = useState(true)
   const policePrete = useOswald()
   const pose = trouverPose(poseId)
 
@@ -51,6 +52,7 @@ export default function GourdeCommandeModal({ produit, onValider, onValiderEtPay
       illustration: pose.id,
       contact_nom: contactNom.trim(),
       contact_tel: nettoyerTelephone(contactTel),
+      stickers,
     }
   }
 
@@ -59,7 +61,7 @@ export default function GourdeCommandeModal({ produit, onValider, onValiderEtPay
       <div className="modale" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
         <h2>{produit.nom}</h2>
         <p style={{ color: 'var(--texte-clair)' }}>
-          {formatEuros(produit.prix)} · étiquette de gourde + 6 stickers, remise au match suivant
+          {formatEuros(produit.prix)} · étiquette de gourde{stickers ? ' + 6 stickers' : ''}, remise au match suivant
         </p>
 
         <div
@@ -136,6 +138,16 @@ export default function GourdeCommandeModal({ produit, onValider, onValiderEtPay
             />
           </div>
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 0 4px', fontWeight: 600, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={stickers}
+            onChange={(e) => setStickers(e.target.checked)}
+            style={{ width: 22, height: 22 }}
+          />
+          Avec les 6 petits stickers prénom + numéro (casque, crosse, sac)
+        </label>
+
         {contactTel && !telOk && (
           <p style={{ fontSize: '0.8rem', color: 'var(--rouge)', marginTop: -6 }}>
             Numéro de téléphone incomplet (10 chiffres).
