@@ -497,10 +497,11 @@ input {
 }
 
 .produit-tailles {
-  font-size: 0.72rem;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: var(--texte-clair);
   line-height: 1.2;
-  margin-top: -4px;
+  margin-top: -2px;
 }
 
 .badge-stock {
@@ -834,10 +835,22 @@ input {
   text-align: center;
 }
 
+/* Les boutons Annuler/Valider restent toujours accessibles, même quand le
+   contenu de la modale est assez grand pour nécessiter un défilement (ex :
+   paiement en espèces, qui ajoute un champ + un récapitulatif de monnaie) :
+   la barre d'actions reste collée en bas de la modale plutôt que de
+   défiler avec le reste, en couvrant le padding de .modale pour ne pas
+   laisser de bande vide sous elle. */
 .modale-actions {
   display: flex;
   gap: 10px;
-  margin-top: 16px;
+  margin: 16px -24px -24px;
+  padding: 12px 24px 20px;
+  position: sticky;
+  bottom: -24px;
+  background: white;
+  border-top: 1px solid var(--bordure);
+  border-radius: 0 0 18px 18px;
 }
 
 .bouton-payer-maintenant {
