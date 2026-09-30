@@ -12,8 +12,7 @@ import {
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
 import EncartMatch from '../components/EncartMatch.jsx'
-import GourdeCommandeModal from '../components/GourdeCommandeModal.jsx'
-import { estProduitGourde, trouverPose } from '../components/GourdePerso/poses'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 function clePanier(produitId, taille) {
   return `${produitId}|${taille || ''}`
@@ -50,13 +49,17 @@ export default function Vente({ benevole }) {
     Object.fromEntries(CATEGORIES.map((c) => [c.cle, true]))
   )
   const [produitOuvert, setProduitOuvert] = useState(null)
-  const [gourdeOuverte, setGourdeOuverte] = useState(null)
   const [paiementOuvert, setPaiementOuvert] = useState(false)
   const [enregistrement, setEnregistrement] = useState(false)
   const [succes, setSucces] = useState(null)
   const [erreurVente, setErreurVente] = useState(null)
   const [tickCarrousel, setTickCarrousel] = useState(0)
   const [matchCourant, setMatchCourant] = useState(null)
+
+  // La touche/geste "retour" du téléphone referme l'écran de succès au lieu
+  // de faire quitter l'application (AjoutModal et PaiementModal gèrent déjà
+  // ce comportement pour elles-mêmes).
+  useFermetureRetour(!!succes, () => setSucces(null))
 
   // Un seul minuteur partagé par toutes les vignettes (plutôt qu'un par
   // produit) fait avancer le carrousel des photos face/dos toutes les 3s.
@@ -126,32 +129,6 @@ export default function Vente({ benevole }) {
     setPaiementOuvert(true)
   }
 
-  // Commande « Custom Gourde » : une ligne de panier par enfant, avec sa
-  // personnalisation (enregistrée dans commandes_gourde après l'encaissement).
-  function ajouterCommandeGourde(produit, details, payer) {
-    const variante = (produit.variantes_produit || []).find((v) => !v.taille)
-    setPanier((lignes) => [
-      ...lignes,
-      {
-        cle: `gourde|${Date.now()}|${details.prenom}`,
-        produit_id: produit.id,
-        variante_id: variante ? variante.id : null,
-        nom: produit.nom,
-        taille: null,
-        quantite: 1,
-        prix_unitaire: produit.prix,
-        gourde: details,
-      },
-    ])
-    setGourdeOuverte(null)
-    if (payer) setPaiementOuvert(true)
-  }
-
-  function ouvrirProduit(produit) {
-    if (estProduitGourde(produit)) setGourdeOuverte(produit)
-    else setProduitOuvert(produit)
-  }
-
   function modifierQuantite(cle, delta) {
     setPanier((lignes) =>
       lignes
@@ -189,33 +166,11 @@ export default function Vente({ benevole }) {
       return
     }
     const resultat = Array.isArray(data) ? data[0] : data
-
-    // Personnalisations des gourdes, rattachées à la vente qui vient d'être
-    // enregistrée. En cas d'échec, la vente reste valide : on affiche les
-    // informations à noter à la main.
-    const commandesGourde = panier.filter((l) => l.gourde).map((l) => l.gourde)
-    const gourdesEnEchec = []
-    for (const g of commandesGourde) {
-      const { error: errGourde } = await supabase.rpc('enregistrer_commande_gourde', {
-        p_benevole_id: benevole.id,
-        p_vente_id: resultat?.vente_id ?? null,
-        p_prenom: g.prenom,
-        p_numero: g.numero || null,
-        p_illustration: g.illustration,
-        p_contact_nom: g.contact_nom,
-        p_contact_tel: g.contact_tel,
-        p_stickers: g.stickers !== false,
-      })
-      if (errGourde) gourdesEnEchec.push(g)
-    }
-
     setPaiementOuvert(false)
     setSucces({
       mode,
       total: resultat?.total ?? total,
       monnaie: resultat?.monnaie ?? null,
-      gourdes: commandesGourde.length,
-      gourdesEnEchec,
     })
     setPanier([])
     chargerProduits()
@@ -296,7 +251,7 @@ export default function Vente({ benevole }) {
               <button
                 key={produit.id}
                 className="produit-bouton"
-                onClick={() => ouvrirProduit(produit)}
+                onClick={() => setProduitOuvert(produit)}
               >
                 {!produit.prix && (
                   <span className="badge-prix-manquant">Prix à définir</span>
@@ -331,15 +286,6 @@ export default function Vente({ benevole }) {
               <div className="panier-ligne" key={l.cle}>
                 <div className="panier-ligne-info">
                   <span className="panier-ligne-nom">{l.nom}</span>
-                  {l.gourde && (
-                    <span className="panier-ligne-detail" style={{ fontWeight: 700, color: 'var(--bleu)' }}>
-                      {l.gourde.prenom}
-                      {l.gourde.numero ? ` #${l.gourde.numero}` : ''} · {trouverPose(l.gourde.illustration).nom} ·{' '}
-                      {l.gourde.stickers === false ? 'sans stickers' : '+ 6 stickers'}
-                      <br />
-                      Contact : {l.gourde.contact_nom} · {l.gourde.contact_tel}
-                    </span>
-                  )}
                   <span className="panier-ligne-detail">
                     {l.taille ? `Taille ${l.taille} · ` : ''}
                     {formatEuros(l.prix_unitaire)} × {l.quantite} ={' '}
@@ -347,13 +293,11 @@ export default function Vente({ benevole }) {
                   </span>
                 </div>
                 <div className="panier-ligne-actions">
-                  {!l.gourde && (
-                    <div className="pas-a-pas">
-                      <button onClick={() => modifierQuantite(l.cle, -1)}>−</button>
-                      <span>{l.quantite}</span>
-                      <button onClick={() => modifierQuantite(l.cle, 1)}>+</button>
-                    </div>
-                  )}
+                  <div className="pas-a-pas">
+                    <button onClick={() => modifierQuantite(l.cle, -1)}>−</button>
+                    <span>{l.quantite}</span>
+                    <button onClick={() => modifierQuantite(l.cle, 1)}>+</button>
+                  </div>
                   <button className="bouton-supprimer" onClick={() => supprimerLigne(l.cle)}>
                     ✕
                   </button>
@@ -387,15 +331,6 @@ export default function Vente({ benevole }) {
           />
         )}
 
-        {gourdeOuverte && (
-          <GourdeCommandeModal
-            produit={gourdeOuverte}
-            onFermer={() => setGourdeOuverte(null)}
-            onValider={(details) => ajouterCommandeGourde(gourdeOuverte, details, false)}
-            onValiderEtPayer={(details) => ajouterCommandeGourde(gourdeOuverte, details, true)}
-          />
-        )}
-
         {paiementOuvert && (
           <PaiementModal
             total={total}
@@ -414,31 +349,6 @@ export default function Vente({ benevole }) {
                 <p>Total : {formatEuros(succes.total)}</p>
                 {succes.mode === 'especes' && succes.monnaie !== null && (
                   <p>Monnaie rendue : {formatEuros(succes.monnaie)}</p>
-                )}
-                {succes.gourdes > 0 && succes.gourdesEnEchec.length === 0 && (
-                  <p>
-                    🥤 {succes.gourdes} gourde{succes.gourdes > 1 ? 's' : ''} personnalisée
-                    {succes.gourdes > 1 ? 's' : ''} enregistrée{succes.gourdes > 1 ? 's' : ''} : à
-                    préparer depuis l'onglet Gourde.
-                  </p>
-                )}
-                {succes.gourdesEnEchec.length > 0 && (
-                  <div className="erreur" style={{ textAlign: 'left' }}>
-                    <p>
-                      La vente est bien enregistrée, mais la personnalisation n'a pas pu être
-                      sauvegardée. Note ces informations sur papier :
-                    </p>
-                    {succes.gourdesEnEchec.map((g, i) => (
-                      <p key={i}>
-                        <b>
-                          {g.prenom}
-                          {g.numero ? ` #${g.numero}` : ''}
-                        </b>{' '}
-                        · {trouverPose(g.illustration).nom} · {g.stickers === false ? 'sans stickers' : '+ 6 stickers'} ·{' '}
-                        {g.contact_nom} · {g.contact_tel}
-                      </p>
-                    ))}
-                  </div>
                 )}
                 <button className="bouton-principal" onClick={() => setSucces(null)}>
                   Nouvelle vente
