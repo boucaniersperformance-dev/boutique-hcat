@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ensureSupabaseSession } from './supabaseClient'
+import { ensureSupabaseSession, supabase } from './supabaseClient'
 import Login from './screens/Login.jsx'
 import Vente from './screens/Vente.jsx'
 import AdminProduits from './screens/AdminProduits.jsx'
@@ -22,6 +22,12 @@ export default function App() {
     }
   })
   const [ecran, setEcran] = useState('vente')
+  // 'desactive' | 'page_seule' | 'complet' — réglage modifiable depuis
+  // l'onglet Produits (rubrique "Jeu du palet"). Démarre sur 'desactive'
+  // (achat simple partout, onglet masqué) tant que la vraie valeur n'a pas
+  // été chargée, pour ne jamais montrer la fonction par erreur avant de
+  // savoir si elle est vraiment activée.
+  const [jeuPaletMode, setJeuPaletMode] = useState('desactive')
 
   useEffect(() => {
     ensureSupabaseSession()
@@ -44,6 +50,37 @@ export default function App() {
     setBenevole(null)
     sessionStorage.removeItem(CLE_SESSION)
   }
+
+  // Charge le réglage du jeu du palet une fois connecté (une tablette qui
+  // reste ouverte plusieurs jours reprend simplement la valeur lue à sa
+  // dernière connexion — un responsable qui change le réglage le voit tout
+  // de suite sur sa propre tablette, les autres le reprennent à leur
+  // prochaine connexion, comme pour un changement de prix ou de stock).
+  useEffect(() => {
+    if (!pret || !benevole) return
+    let annule = false
+    supabase
+      .from('parametres_boutique')
+      .select('jeu_palet_mode')
+      .eq('id', 1)
+      .single()
+      .then(({ data, error }) => {
+        if (annule || error || !data) return
+        setJeuPaletMode(data.jeu_palet_mode)
+      })
+    return () => {
+      annule = true
+    }
+  }, [pret, benevole])
+
+  // Si le réglage est désactivé pendant qu'un bénévole se trouve sur
+  // l'écran "Jeux du palet" (rare, mais possible si un responsable le
+  // désactive entretemps ailleurs), on le ramène sur l'écran de vente
+  // plutôt que de le laisser sur un onglet qui vient de disparaître du
+  // menu.
+  useEffect(() => {
+    if (jeuPaletMode === 'desactive' && ecran === 'palet') setEcran('vente')
+  }, [jeuPaletMode, ecran])
 
   if (erreurConnexion) {
     return (
@@ -80,12 +117,14 @@ export default function App() {
           >
             Vente
           </button>
-          <button
-            className={ecran === 'palet' ? 'actif' : ''}
-            onClick={() => setEcran('palet')}
-          >
-            Jeux du palet
-          </button>
+          {jeuPaletMode !== 'desactive' && (
+            <button
+              className={ecran === 'palet' ? 'actif' : ''}
+              onClick={() => setEcran('palet')}
+            >
+              Jeux du palet
+            </button>
+          )}
           <button
             className={ecran === 'gourde' ? 'actif' : ''}
             onClick={() => setEcran('gourde')}
@@ -124,11 +163,15 @@ export default function App() {
       </header>
 
       <main className="contenu">
-        {ecran === 'vente' && <Vente benevole={benevole} />}
-        {ecran === 'palet' && <JeuPalet benevole={benevole} />}
+        {ecran === 'vente' && <Vente benevole={benevole} jeuPaletMode={jeuPaletMode} />}
+        {ecran === 'palet' && jeuPaletMode !== 'desactive' && <JeuPalet benevole={benevole} />}
         {ecran === 'gourde' && <GourdePerso benevole={benevole} />}
         {ecran === 'produits' && estResponsable && (
-          <AdminProduits benevole={benevole} />
+          <AdminProduits
+            benevole={benevole}
+            jeuPaletMode={jeuPaletMode}
+            onChangerJeuPaletMode={setJeuPaletMode}
+          />
         )}
         {ecran === 'benevoles' && estResponsable && (
           <AdminBenevoles benevole={benevole} />
@@ -145,4 +188,3 @@ export default function App() {
     </div>
   )
 }
-
