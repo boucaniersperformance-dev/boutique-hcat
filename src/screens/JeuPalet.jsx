@@ -135,9 +135,19 @@ export default function JeuPalet({ benevole }) {
     })
     setEnregistrement(false)
     if (error) {
-      setErreurVente(
-        "L'encaissement n'a pas pu être enregistré. Vérifie ta connexion et réessaie — le panier n'a pas été vidé."
-      )
+      if (error.message === 'Numéro de palet déjà vendu') {
+        // Une autre tablette vient de vendre un des numéros du panier au
+        // même moment : le journal est rechargé pour que le tableau se
+        // grise aussitôt et permette de repérer le numéro en conflit.
+        setErreurVente(
+          "Un des numéros du panier vient d'être vendu par quelqu'un d'autre à l'instant. Regarde le tableau ci-dessus (rafraîchi) pour repérer le numéro déjà pris, retire-le du panier puis réessaie."
+        )
+        chargerJournal()
+      } else {
+        setErreurVente(
+          "L'encaissement n'a pas pu être enregistré. Vérifie ta connexion et réessaie — le panier n'a pas été vidé."
+        )
+      }
       return
     }
     const resultat = Array.isArray(data) ? data[0] : data
