@@ -1,57 +1,64 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import logoSrc from './logo-boucaniers.webp';
-import attaquantSrc from './joueur-boucaniers.webp';
-import gardienSrc from './joueur-gardien.webp';
-import paletSrc from './joueur-palet.webp';
-import miseAuJeuSrc from './joueur-mise-au-jeu.webp';
+import { POSES } from './poses';
+import { LIEN_POLICE, useOswald, creerMesure } from './police';
+import { supabase } from '../../supabaseClient';
 import {
   NAVY, GOLD, svgApercu, pageImpression, nettoyerPrenom, nettoyerNumero,
 } from './etiquetteGourde';
 
-// Choix de l'illustration (ratio = largeur / hauteur de l'image)
-// Pour en ajouter une : déposer le .webp dans ce dossier, l'importer ci-dessus et l'ajouter ici.
-const POSES = [
-  { id: 'attaquant', nom: 'Attaquant', src: attaquantSrc, ratio: 0.785 },
-  { id: 'palet', nom: 'Conduite de palet', src: paletSrc, ratio: 1.579 },
-  { id: 'gardien', nom: 'Gardien', src: gardienSrc, ratio: 1.482 },
-  { id: 'mise-au-jeu', nom: 'Mise au jeu', src: miseAuJeuSrc, ratio: 1.874 },
-];
-
-const LIEN_POLICE = 'https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap';
-
-// Charge la police Oswald une seule fois dans la page
-function useOswald() {
-  const [prete, setPrete] = useState(false);
-  useEffect(() => {
-    if (!document.querySelector(`link[href="${LIEN_POLICE}"]`)) {
-      const l = document.createElement('link');
-      l.rel = 'stylesheet';
-      l.href = LIEN_POLICE;
-      document.head.appendChild(l);
-    }
-    document.fonts?.load('700 20px Oswald').finally(() => setPrete(true));
-  }, []);
-  return prete;
-}
-
-// Mesure réelle d'un texte (en mm, puisque la taille est en mm) via un canvas
-function creerMesure() {
-  const ctx = document.createElement('canvas').getContext('2d');
-  return (texte, taille) => {
-    ctx.font = `700 100px Oswald, 'Arial Narrow', sans-serif`;
-    return (ctx.measureText(texte).width / 100) * taille;
-  };
-}
-
 const absolu = (src) => new URL(src, window.location.href).href;
 
-export default function GourdePerso() {
+export default function GourdePerso({ benevole }) {
   const [prenom, setPrenom] = useState('');
   const [numero, setNumero] = useState('');
   const [poseId, setPoseId] = useState(POSES[0].id);
   const [stickers, setStickers] = useState(true);
   const pose = POSES.find((p) => p.id === poseId) || POSES[0];
   const policePrete = useOswald();
+
+  // Commandes passées depuis l'écran Vente (produit « Custom Gourde »)
+  const [commandes, setCommandes] = useState([]);
+  const [erreurCommandes, setErreurCommandes] = useState(null);
+  const [commandeActive, setCommandeActive] = useState(null);
+
+  const chargerCommandes = useCallback(async () => {
+    if (!benevole) return;
+    const { data, error } = await supabase.rpc('lister_commandes_gourde', {
+      p_benevole_id: benevole.id,
+      p_inclure_remises: false,
+    });
+    if (error) {
+      setErreurCommandes(
+        "Commandes indisponibles : le script supabase/commandes_gourde.sql a-t-il été exécuté dans Supabase ?"
+      );
+    } else {
+      setErreurCommandes(null);
+      setCommandes(data || []);
+    }
+  }, [benevole]);
+
+  useEffect(() => {
+    chargerCommandes();
+  }, [chargerCommandes]);
+
+  async function changerStatut(commande, statut) {
+    const { error } = await supabase.rpc('changer_statut_commande_gourde', {
+      p_benevole_id: benevole.id,
+      p_commande_id: commande.id,
+      p_statut: statut,
+    });
+    if (error) alert("Le statut n'a pas pu être modifié. Vérifie ta connexion.");
+    chargerCommandes();
+  }
+
+  function preparer(commande) {
+    setPrenom(commande.prenom || '');
+    setNumero(commande.numero || '');
+    setPoseId(POSES.some((p) => p.id === commande.illustration) ? commande.illustration : POSES[0].id);
+    setCommandeActive(commande);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   const options = useMemo(() => ({
     prenom,
@@ -90,7 +97,13 @@ export default function GourdePerso() {
   Promise.all([document.fonts.ready, ...imgs]).then(() => setTimeout(() => window.print(), 300));
 <\/script></body></html>`);
     w.document.close();
-  }, [options, prenom, numero]);
+    // Une commande préparée puis imprimée passe automatiquement à « imprimée »
+    if (commandeActive && commandeActive.statut === 'a_imprimer') {
+      changerStatut(commandeActive, 'imprimee');
+      setCommandeActive(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options, prenom, numero, commandeActive]);
 
   const champ = {
     width: '100%', padding: '12px 14px', fontSize: 18, borderRadius: 10,
@@ -103,6 +116,81 @@ export default function GourdePerso() {
       <p style={{ margin: '0 0 16px', opacity: 0.75 }}>
         Étiquette 24,5 × 11 cm aux couleurs des Boucaniers.
       </p>
+
+      {benevole && (
+        <section style={{ background: '#fff', border: `2px solid ${NAVY}`, borderRadius: 12, padding: 14, marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 18 }}>
+              Commandes à préparer {commandes.length > 0 && `(${commandes.length})`}
+            </h3>
+            <button type="button" className="bouton-secondaire" onClick={chargerCommandes} style={{ padding: '6px 12px' }}>
+              Actualiser
+            </button>
+          </div>
+          {erreurCommandes && <p className="erreur">{erreurCommandes}</p>}
+          {!erreurCommandes && commandes.length === 0 && (
+            <p style={{ margin: '8px 0 0', opacity: 0.7 }}>Aucune commande en attente.</p>
+          )}
+          {commandes.map((c) => {
+            const imprimee = c.statut === 'imprimee';
+            const active = commandeActive?.id === c.id;
+            return (
+              <div
+                key={c.id}
+                style={{
+                  display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, justifyContent: 'space-between',
+                  padding: '10px 0', borderTop: '1px solid #e3e6ee',
+                  background: active ? '#fff8dc' : 'transparent',
+                }}
+              >
+                <div style={{ minWidth: 200, flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>
+                    {c.prenom}
+                    {c.numero ? ` #${c.numero}` : ''}{' '}
+                    <span style={{ fontWeight: 500, opacity: 0.7 }}>
+                      · {(POSES.find((p) => p.id === c.illustration) || POSES[0]).nom}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 14, opacity: 0.85 }}>
+                    {c.contact_nom} · <a href={`tel:${c.contact_tel}`}>{c.contact_tel}</a> ·{' '}
+                    {new Date(c.cree_le).toLocaleDateString('fr-FR')}
+                  </div>
+                  <div
+                    style={{
+                      display: 'inline-block', marginTop: 4, fontSize: 12, fontWeight: 700, padding: '2px 8px',
+                      borderRadius: 999, background: imprimee ? '#dff3e4' : '#fff1c2', color: imprimee ? '#1d6b35' : '#7a5a00',
+                    }}
+                  >
+                    {imprimee ? 'Imprimée, à remettre' : 'À imprimer'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button type="button" className="bouton-secondaire" onClick={() => preparer(c)} style={{ padding: '8px 12px' }}>
+                    Préparer
+                  </button>
+                  {!imprimee && (
+                    <button type="button" className="bouton-secondaire" onClick={() => changerStatut(c, 'imprimee')} style={{ padding: '8px 12px' }}>
+                      Imprimée ✓
+                    </button>
+                  )}
+                  {imprimee && (
+                    <button type="button" className="bouton-principal" onClick={() => changerStatut(c, 'remise')} style={{ padding: '8px 12px' }}>
+                      Remise ✓
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {commandeActive && (
+        <p style={{ background: '#fff8dc', border: `1px solid ${GOLD}`, borderRadius: 8, padding: '8px 12px' }}>
+          Commande de <b>{commandeActive.contact_nom}</b> chargée : vérifiez l'aperçu puis imprimez. Elle passera
+          automatiquement à « imprimée ».
+        </p>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginBottom: 16 }}>
         <label style={{ fontWeight: 600 }}>
