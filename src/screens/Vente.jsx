@@ -50,7 +50,7 @@ function taillesDisponibles(produit) {
 
 const INTERVALLE_CARROUSEL_MS = 3000
 
-export default function Vente({ benevole }) {
+export default function Vente({ benevole, jeuPaletMode }) {
   const [produits, setProduits] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
@@ -113,9 +113,12 @@ export default function Vente({ benevole }) {
     if (!error) setJournalPaletDuJour(data || [])
   }, [benevole.id])
 
+  // Inutile de charger ce journal (et d'interroger la base) quand la
+  // fonction complète du jeu du palet n'est pas activée pour la page
+  // Vente — voir le réglage dans l'onglet Produits.
   useEffect(() => {
-    chargerJournalPalet()
-  }, [chargerJournalPalet])
+    if (jeuPaletMode === 'complet') chargerJournalPalet()
+  }, [jeuPaletMode, chargerJournalPalet])
 
   useEffect(() => {
     if (paletOuvert) chargerJournalPalet()
@@ -214,7 +217,7 @@ export default function Vente({ benevole }) {
 
   function ouvrirProduit(produit) {
     if (estProduitGourde(produit)) setGourdeOuverte(produit)
-    else if (estProduitPalet(produit)) setPaletOuvert(produit)
+    else if (jeuPaletMode === 'complet' && estProduitPalet(produit)) setPaletOuvert(produit)
     else setProduitOuvert(produit)
   }
 
