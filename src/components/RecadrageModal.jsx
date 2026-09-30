@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 const TAILLE_SORTIE = 800 // px, la photo enregistrée sera toujours un carré de cette taille
 const ZOOM_MAX = 4
@@ -10,6 +11,10 @@ const ZOOM_MAX = 4
 // cadrage ET réduit sa taille (JPEG ~800x800), quelle que soit la photo
 // d'origine envoyée par le bénévole.
 export default function RecadrageModal({ fichier, onValider, onAnnuler }) {
+  // La touche/geste "retour" du téléphone referme cette modale (comme le
+  // bouton Annuler), au lieu de faire quitter l'application.
+  useFermetureRetour(true, () => annuler())
+
   const urlImage = useMemo(() => URL.createObjectURL(fichier), [fichier])
   const zoneRef = useRef(null)
   const imgRef = useRef(null)
@@ -104,6 +109,14 @@ export default function RecadrageModal({ fichier, onValider, onAnnuler }) {
     canvas.width = TAILLE_SORTIE
     canvas.height = TAILLE_SORTIE
     const ctx = canvas.getContext('2d')
+    // La photo source peut avoir un fond transparent (ex : détouré par le
+    // fournisseur). Comme le fichier enregistré est un JPEG — qui ne gère
+    // pas la transparence — tout ce qui reste transparent dans le canevas
+    // serait sinon comblé en NOIR par le navigateur au moment de
+    // l'export : on part donc d'un fond blanc plutôt que de laisser faire
+    // ce comportement par défaut.
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, TAILLE_SORTIE, TAILLE_SORTIE)
     ctx.drawImage(
       imgRef.current,
       sourceX,
