@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatEuros, resumeMatch } from '../constants.js'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 function aujourdHui() {
   return new Date().toISOString().slice(0, 10)
@@ -26,6 +27,11 @@ export default function Historique({ benevole }) {
   const [pinConfirmationMatch, setPinConfirmationMatch] = useState('')
   const [erreurSuppressionMatch, setErreurSuppressionMatch] = useState(null)
   const [suppressionMatchEnCours, setSuppressionMatchEnCours] = useState(false)
+
+  // La touche/geste "retour" du téléphone referme ces fenêtres de
+  // confirmation au lieu de faire quitter l'application.
+  useFermetureRetour(!!venteASupprimer, fermerSuppression)
+  useFermetureRetour(!!matchASupprimer, fermerSuppressionMatch)
 
   const chargerMatchs = useCallback(async () => {
     setChargementMatchs(true)
