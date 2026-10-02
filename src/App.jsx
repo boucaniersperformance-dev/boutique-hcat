@@ -6,6 +6,7 @@ import AdminProduits from './screens/AdminProduits.jsx'
 import AdminBenevoles from './screens/AdminBenevoles.jsx'
 import Historique from './screens/Historique.jsx'
 import JeuPalet from './screens/JeuPalet.jsx'
+import CaisseEspeces from './screens/CaisseEspeces.jsx'
 import GourdePerso from './components/GourdePerso/GourdePerso.jsx'
 
 const CLE_SESSION = 'boutique-hcat-session'
@@ -82,6 +83,16 @@ export default function App() {
     if (jeuPaletMode === 'desactive' && ecran === 'palet') setEcran('vente')
   }, [jeuPaletMode, ecran])
 
+  // Si un responsable se déconnecte (ou perd son statut) pendant qu'il se
+  // trouve sur un écran réservé aux responsables, on le ramène sur l'écran
+  // de vente.
+  useEffect(() => {
+    const estResponsable = benevole?.role === 'responsable'
+    if (!estResponsable && ['produits', 'benevoles', 'historique', 'caisse'].includes(ecran)) {
+      setEcran('vente')
+    }
+  }, [benevole, ecran])
+
   if (erreurConnexion) {
     return (
       <div className="login-ecran">
@@ -151,6 +162,12 @@ export default function App() {
               >
                 Historique
               </button>
+              <button
+                className={ecran === 'caisse' ? 'actif' : ''}
+                onClick={() => setEcran('caisse')}
+              >
+                Caisse Espèces
+              </button>
             </>
           )}
         </nav>
@@ -178,6 +195,9 @@ export default function App() {
         )}
         {ecran === 'historique' && estResponsable && (
           <Historique benevole={benevole} />
+        )}
+        {ecran === 'caisse' && estResponsable && (
+          <CaisseEspeces benevole={benevole} />
         )}
       </main>
 
