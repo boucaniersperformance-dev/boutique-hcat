@@ -250,7 +250,10 @@ function libelleMode(mode) {
 // `ventes` : lignes brutes renvoyées par lister_ventes (voir Historique.jsx).
 // `totauxParArticle` : [{ nom, total, tailles: [{ taille, quantite }] }]
 //   déjà regroupées et triées (voir totauxParArticle dans Historique.jsx).
-function construireFeuilleXml({ dateDebut, dateFin, ventes, totauxParArticle }) {
+// `caisseParJour` : [{ jour, fondDeCaisse, totalCompte, totalEspecesVentes,
+//   ecart }] — un comptage de caisse par jour (voir caisseParJour dans
+//   Historique.jsx) ; absent ou vide si aucun comptage sur la période.
+function construireFeuilleXml({ dateDebut, dateFin, ventes, totauxParArticle, caisseParJour }) {
   const totalCB = ventes.filter((v) => v.mode_paiement === 'cb').reduce((s, v) => s + Number(v.total), 0)
   const totalEspeces = ventes
     .filter((v) => v.mode_paiement === 'especes')
@@ -325,6 +328,32 @@ function construireFeuilleXml({ dateDebut, dateFin, ventes, totauxParArticle }) 
     lignes.push(
       ligneRecap(n++, 'Total', totalGeneralArticles, STYLE_IDS.totalFinalLabel, STYLE_IDS.totalFinalValeurNombre)
     )
+  }
+
+  if (caisseParJour && caisseParJour.length > 0) {
+    n += 2 // deux lignes vides
+    lignes.push(ligneBandeau(n++, 'Caisse (comptages espèces)', STYLE_IDS.banniere, 20))
+    {
+      const entetes = ['Jour', 'Fond de caisse', 'Total compté', 'Total espèces (ventes)', 'Écart']
+      const cellules = entetes.map((texte, i) => celluleTexte(i + 1, n, texte, STYLE_IDS.enteteTableau))
+      for (let col = entetes.length + 1; col <= NB_COLONNES; col++) {
+        cellules.push(celluleVide(col, n, STYLE_IDS.enteteTableau))
+      }
+      lignes.push(ligne(n, cellules, 18))
+      n++
+    }
+    for (const c of caisseParJour) {
+      const cellules = [
+        celluleTexte(1, n, formaterDateFr(c.jour), STYLE_IDS.cellule),
+        celluleNombre(2, n, c.fondDeCaisse, STYLE_IDS.celluleMontant),
+        celluleNombre(3, n, c.totalCompte, STYLE_IDS.celluleMontant),
+        celluleNombre(4, n, c.totalEspecesVentes, STYLE_IDS.celluleMontant),
+        celluleNombre(5, n, c.ecart, STYLE_IDS.celluleMontant),
+      ]
+      for (let col = 6; col <= NB_COLONNES; col++) cellules.push(celluleVide(col, n, STYLE_IDS.cellule))
+      lignes.push(ligne(n, cellules, 15))
+      n++
+    }
   }
 
   const largeurs = [22, 16, 10, 46, 10, 10, 10]
@@ -419,8 +448,8 @@ const WORKBOOK_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"
 
 // Construit le classeur complet et renvoie les octets du fichier .xlsx
 // (un Uint8Array), prêt à être enveloppé dans un Blob.
-export function construireClasseurVentesXlsx({ dateDebut, dateFin, ventes, totauxParArticle }) {
-  const feuilleXml = construireFeuilleXml({ dateDebut, dateFin, ventes, totauxParArticle })
+export function construireClasseurVentesXlsx({ dateDebut, dateFin, ventes, totauxParArticle, caisseParJour }) {
+  const feuilleXml = construireFeuilleXml({ dateDebut, dateFin, ventes, totauxParArticle, caisseParJour })
 
   return creerZipStocke([
     { nom: '[Content_Types].xml', contenu: CONTENT_TYPES_XML },
