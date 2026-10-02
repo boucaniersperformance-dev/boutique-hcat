@@ -981,9 +981,17 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
             </tr>
           </thead>
           <tbody>
-            {produitsActifs.map((produit) => (
+            {produitsActifs.map((produit) => {
+              const categorie = categorieProduit(produit)
+              const fondLigne =
+                categorie === 'enfant'
+                  ? 'var(--fond-ligne-enfant)'
+                  : categorie === 'adulte'
+                    ? 'var(--fond-ligne-adulte)'
+                    : undefined
+              return (
               <Fragment key={produit.id}>
-              <tr>
+              <tr style={fondLigne ? { background: fondLigne } : undefined}>
                 <td>
                   <div className="produit-image" style={{ width: 56, height: 56 }}>
                     {produit.photo_url ? (
@@ -1250,7 +1258,8 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                 </tr>
               )}
               </Fragment>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
