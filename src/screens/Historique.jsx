@@ -146,21 +146,34 @@ export default function Historique({ benevole }) {
   // totaux_articles_vendus par article, avec le détail par taille trié
   // dans l'ordre naturel (S, M, L, XL... plutôt que l'ordre alphabétique)
   // — uniquement quand l'article a effectivement des tailles.
+  // Le prix unitaire affiché par groupe (article entier, ou chaque taille)
+  // est déduit du montant encaissé divisé par la quantité — ça donne
+  // directement la bonne valeur même si le prix a changé en cours de
+  // période, sans avoir à choisir arbitrairement "le" prix unitaire.
   const totauxParArticle = useMemo(() => {
     const groupes = new Map()
     for (const ligne of totauxArticles) {
       if (!groupes.has(ligne.nom_produit)) {
-        groupes.set(ligne.nom_produit, { nom: ligne.nom_produit, total: 0, tailles: [] })
+        groupes.set(ligne.nom_produit, { nom: ligne.nom_produit, total: 0, montant: 0, tailles: [] })
       }
       const groupe = groupes.get(ligne.nom_produit)
-      groupe.total += Number(ligne.quantite)
+      const quantite = Number(ligne.quantite)
+      const montant = Number(ligne.montant)
+      groupe.total += quantite
+      groupe.montant += montant
       if (ligne.taille) {
-        groupe.tailles.push({ taille: ligne.taille, quantite: Number(ligne.quantite) })
+        groupe.tailles.push({
+          taille: ligne.taille,
+          quantite,
+          montant,
+          prixUnitaire: quantite > 0 ? montant / quantite : 0,
+        })
       }
     }
     return [...groupes.values()]
       .map((g) => ({
         ...g,
+        prixUnitaire: g.total > 0 ? g.montant / g.total : 0,
         tailles: g.tailles.slice().sort((a, b) => comparerTailles(a.taille, b.taille)),
       }))
       .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))
