@@ -316,11 +316,22 @@ export default function Vente({ benevole, jeuPaletMode }) {
     return compte
   }, [produits])
 
+  // Ordre d'affichage voulu dans la grille de vente, toujours respecté
+  // automatiquement (y compris après un changement de stock ou de mise en
+  // vente) : goodies d'abord, puis les vêtements adulte, puis enfant. À
+  // catégorie égale, l'ordre de l'onglet Produits (colonne `ordre`) est
+  // conservé grâce au tri stable de Array.prototype.sort.
+  const ORDRE_CATEGORIES = { goodies: 0, adulte: 1, enfant: 2 }
+
   const produitsAffiches = useMemo(
     () =>
-      produits.filter(
-        (p) => produitEnStock(p) && categoriesActives[categorieProduit(p)]
-      ),
+      produits
+        .filter((p) => produitEnStock(p) && categoriesActives[categorieProduit(p)])
+        .slice()
+        .sort(
+          (a, b) =>
+            ORDRE_CATEGORIES[categorieProduit(a)] - ORDRE_CATEGORIES[categorieProduit(b)]
+        ),
     [produits, categoriesActives]
   )
 
@@ -396,6 +407,9 @@ export default function Vente({ benevole, jeuPaletMode }) {
                   </span>
                 )}
                 <div className="produit-image">
+                  {categorieProduit(produit) === 'enfant' && (
+                    <span className="ruban-enfant">Enfant</span>
+                  )}
                   {photoActuelle ? <img src={photoActuelle} alt={produit.nom} /> : '🛍️'}
                 </div>
                 <div className="produit-nom">{produit.nom}</div>
