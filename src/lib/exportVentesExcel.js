@@ -206,9 +206,8 @@ function ligneBandeau(numeroLigne, texte, style, hauteur) {
   return ligne(numeroLigne, cellules, hauteur)
 }
 
-// Ligne "étiquette / valeur" du récapitulatif (ou du total des articles) :
-// étiquette en colonnes A-B, valeur en colonne C, reste vide du même style
-// que l'étiquette.
+// Ligne "étiquette / valeur" du récapitulatif : étiquette en colonnes A-B,
+// valeur en colonne C, reste vide du même style que l'étiquette.
 function ligneRecap(numeroLigne, etiquette, valeur, styleEtiquette, styleValeur) {
   const cellules = [
     celluleTexte(1, numeroLigne, etiquette, styleEtiquette),
@@ -216,6 +215,24 @@ function ligneRecap(numeroLigne, etiquette, valeur, styleEtiquette, styleValeur)
     celluleNombre(3, numeroLigne, valeur, styleValeur),
   ]
   for (let col = 4; col <= NB_COLONNES; col++) cellules.push(celluleVide(col, numeroLigne, styleEtiquette))
+  return ligne(numeroLigne, cellules)
+}
+
+// Ligne du tableau "Récapitulatif des articles vendus" : étiquette en
+// colonnes A-B, quantité en C (style sans format monétaire), prix unitaire
+// en D et montant en E (style avec format monétaire), reste vide du style
+// de l'étiquette. `prixUnitaire`/`montant` peuvent être null/undefined (la
+// ligne de total n'a pas de "prix unitaire" global) : la cellule reste
+// alors simplement vide plutôt que d'afficher 0.
+function ligneArticle(numeroLigne, etiquette, quantite, prixUnitaire, montant, styleEtiquette, styleQuantite, styleMontant) {
+  const cellules = [
+    celluleTexte(1, numeroLigne, etiquette, styleEtiquette),
+    celluleVide(2, numeroLigne, styleEtiquette),
+    celluleNombre(3, numeroLigne, quantite, styleQuantite),
+    celluleNombre(4, numeroLigne, prixUnitaire, styleMontant),
+    celluleNombre(5, numeroLigne, montant, styleMontant),
+  ]
+  for (let col = 6; col <= NB_COLONNES; col++) cellules.push(celluleVide(col, numeroLigne, styleEtiquette))
   return ligne(numeroLigne, cellules)
 }
 
@@ -236,6 +253,8 @@ const STYLE_IDS = {
   totalFinalLabel: 14,
   totalFinalValeurMontant: 15,
   totalFinalValeurNombre: 16,
+  articleMontant: 17,
+  tailleMontant: 18,
 }
 
 function formaterDateFr(iso) {
@@ -248,8 +267,9 @@ function libelleMode(mode) {
 }
 
 // `ventes` : lignes brutes renvoyées par lister_ventes (voir Historique.jsx).
-// `totauxParArticle` : [{ nom, total, tailles: [{ taille, quantite }] }]
-//   déjà regroupées et triées (voir totauxParArticle dans Historique.jsx).
+// `totauxParArticle` : [{ nom, total, montant, prixUnitaire, tailles: [{
+//   taille, quantite, montant, prixUnitaire }] }] déjà regroupées et
+//   triées (voir totauxParArticle dans Historique.jsx).
 // `caisseParJour` : [{ jour, fondDeCaisse, totalCompte, totalEspecesVentes,
 //   ecart }] — un comptage de caisse par jour (voir caisseParJour dans
 //   Historique.jsx) ; absent ou vide si aucun comptage sur la période.
@@ -301,32 +321,70 @@ function construireFeuilleXml({ dateDebut, dateFin, ventes, totauxParArticle, ca
       celluleNombre(6, n, v.montant_recu, STYLE_IDS.celluleMontant),
       celluleNombre(7, n, v.monnaie_rendue, STYLE_IDS.celluleMontant),
     ]
-    lignes.push(ligne(n, cellules, Math.max(15, nbLignesDetail * 14)))
+    // Marge généreuse par ligne de détail (18pt + un peu de respiration) :
+    // un calcul trop juste laisse Excel tronquer le texte au lieu de
+    // l'afficher en entier, ce qu'il ne corrige pas tout seul à
+    // l'ouverture d'un fichier généré (contrairement à une saisie manuelle).
+    lignes.push(ligne(n, cellules, Math.max(18, nbLignesDetail * 18 + 6)))
     n++
   }
   n += 2 // deux lignes vides
 
   if (totauxParArticle.length > 0) {
     const totalGeneralArticles = totauxParArticle.reduce((s, g) => s + g.total, 0)
+    const montantGeneralArticles = totauxParArticle.reduce((s, g) => s + g.montant, 0)
     lignes.push(ligneBandeau(n++, 'Récapitulatif des articles vendus', STYLE_IDS.banniere, 20))
     {
       const cellules = [
         celluleTexte(1, n, 'Article', STYLE_IDS.enteteTableau),
         celluleVide(2, n, STYLE_IDS.enteteTableau),
         celluleTexte(3, n, 'Quantité', STYLE_IDS.enteteTableau),
+        celluleTexte(4, n, 'Prix unitaire', STYLE_IDS.enteteTableau),
+        celluleTexte(5, n, 'Montant', STYLE_IDS.enteteTableau),
       ]
-      for (let col = 4; col <= NB_COLONNES; col++) cellules.push(celluleVide(col, n, STYLE_IDS.enteteTableau))
+      for (let col = 6; col <= NB_COLONNES; col++) cellules.push(celluleVide(col, n, STYLE_IDS.enteteTableau))
       lignes.push(ligne(n, cellules, 18))
       n++
     }
     for (const groupe of totauxParArticle) {
-      lignes.push(ligneRecap(n++, groupe.nom, groupe.total, STYLE_IDS.articleNom, STYLE_IDS.articleQuantite))
-      for (const { taille, quantite } of groupe.tailles) {
-        lignes.push(ligneRecap(n++, taille, quantite, STYLE_IDS.tailleNom, STYLE_IDS.tailleQuantite))
+      lignes.push(
+        ligneArticle(
+          n++,
+          groupe.nom,
+          groupe.total,
+          groupe.prixUnitaire,
+          groupe.montant,
+          STYLE_IDS.articleNom,
+          STYLE_IDS.articleQuantite,
+          STYLE_IDS.articleMontant
+        )
+      )
+      for (const { taille, quantite, prixUnitaire, montant } of groupe.tailles) {
+        lignes.push(
+          ligneArticle(
+            n++,
+            taille,
+            quantite,
+            prixUnitaire,
+            montant,
+            STYLE_IDS.tailleNom,
+            STYLE_IDS.tailleQuantite,
+            STYLE_IDS.tailleMontant
+          )
+        )
       }
     }
     lignes.push(
-      ligneRecap(n++, 'Total', totalGeneralArticles, STYLE_IDS.totalFinalLabel, STYLE_IDS.totalFinalValeurNombre)
+      ligneArticle(
+        n++,
+        'Total',
+        totalGeneralArticles,
+        null,
+        montantGeneralArticles,
+        STYLE_IDS.totalFinalLabel,
+        STYLE_IDS.totalFinalValeurNombre,
+        STYLE_IDS.totalFinalValeurMontant
+      )
     )
   }
 
@@ -356,7 +414,7 @@ function construireFeuilleXml({ dateDebut, dateFin, ventes, totauxParArticle, ca
     }
   }
 
-  const largeurs = [22, 16, 10, 46, 10, 10, 10]
+  const largeurs = [22, 16, 10, 58, 10, 10, 10]
   const colonnesXml = largeurs
     .map((l, i) => `<col min="${i + 1}" max="${i + 1}" width="${l}" customWidth="1"/>`)
     .join('')
@@ -395,7 +453,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cellStyleXfs count="1">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
 </cellStyleXfs>
-<cellXfs count="17">
+<cellXfs count="19">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>
@@ -413,6 +471,8 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 <xf numFmtId="164" fontId="3" fillId="2" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>
 <xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>
+<xf numFmtId="164" fontId="5" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>
 </cellXfs>
 <cellStyles count="1">
 <cellStyle name="Normal" xfId="0" builtinId="0"/>
