@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatEuros, resumeMatch, comparerTailles } from '../constants.js'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
+import { construireClasseurVentesXml } from '../lib/exportVentesExcel.js'
 
 function aujourdHui() {
   return new Date().toISOString().slice(0, 10)
@@ -171,46 +172,21 @@ export default function Historique({ benevole }) {
       }))
   }, [ventes])
 
-  function exporterCsv() {
-    const entetes = ['Date/heure', 'Bénévole', 'Mode', 'Détail', 'Total', 'Reçu', 'Monnaie']
-    const lignes = ventes.map((v) => [
-      new Date(v.cree_le).toLocaleString('fr-FR'),
-      v.benevole_nom,
-      v.mode_paiement,
-      (v.detail || '').replace(/\n/g, ' '),
-      v.total,
-      v.montant_recu ?? '',
-      v.monnaie_rendue ?? '',
-    ])
-
-    const lignesCsv = [entetes, ...lignes]
-
-    // Récapitulatif des articles vendus, ajouté à la suite du détail des
-    // ventes : une ligne par article avec son total, suivie d'une ligne
-    // par taille quand l'article en a (ex : "Sweat capuche gris chiné" :
-    // 3, puis "" / XL / 2 et "" / M / 1).
-    if (totauxParArticle.length > 0) {
-      const totalGeneralArticles = totauxParArticle.reduce((s, g) => s + g.total, 0)
-      lignesCsv.push([])
-      lignesCsv.push(['Récapitulatif des articles vendus'])
-      lignesCsv.push(['Article', 'Taille', 'Quantité'])
-      for (const groupe of totauxParArticle) {
-        lignesCsv.push([groupe.nom, '', groupe.total])
-        for (const { taille, quantite } of groupe.tailles) {
-          lignesCsv.push(['', taille, quantite])
-        }
-      }
-      lignesCsv.push(['Total', '', totalGeneralArticles])
-    }
-
-    const csv = lignesCsv
-      .map((ligne) => ligne.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
-      .join('\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  // Classeur Excel mis en forme (bandeau de couleur, récapitulatif de la
+  // période en tout premier, tableaux encadrés, montants en euros) — voir
+  // exportVentesExcel.js pour le détail de la construction.
+  function exporterExcel() {
+    const xml = construireClasseurVentesXml({
+      dateDebut,
+      dateFin,
+      ventes,
+      totauxParArticle,
+    })
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ventes_${dateDebut}_${dateFin}.csv`
+    a.download = `ventes_${dateDebut}_${dateFin}.xls`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -308,8 +284,8 @@ export default function Historique({ benevole }) {
           <label>Au</label>
           <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
         </div>
-        <button className="bouton-secondaire" onClick={exporterCsv} disabled={ventes.length === 0}>
-          Exporter en CSV
+        <button className="bouton-secondaire" onClick={exporterExcel} disabled={ventes.length === 0}>
+          📊 Exporter en Excel
         </button>
       </div>
 
