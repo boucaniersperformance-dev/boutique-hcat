@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatEuros, resumeMatch, comparerTailles } from '../constants.js'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
-import { construireClasseurVentesXml } from '../lib/exportVentesExcel.js'
+import { construireClasseurVentesXlsx } from '../lib/exportVentesExcel.js'
 
 function aujourdHui() {
   return new Date().toISOString().slice(0, 10)
@@ -174,19 +174,23 @@ export default function Historique({ benevole }) {
 
   // Classeur Excel mis en forme (bandeau de couleur, récapitulatif de la
   // période en tout premier, tableaux encadrés, montants en euros) — voir
-  // exportVentesExcel.js pour le détail de la construction.
+  // exportVentesExcel.js pour le détail de la construction. C'est un vrai
+  // fichier .xlsx (format natif d'Excel), pour qu'il s'ouvre sans message
+  // d'avertissement.
   function exporterExcel() {
-    const xml = construireClasseurVentesXml({
+    const octets = construireClasseurVentesXlsx({
       dateDebut,
       dateFin,
       ventes,
       totauxParArticle,
     })
-    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    const blob = new Blob([octets], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ventes_${dateDebut}_${dateFin}.xls`
+    a.download = `ventes_${dateDebut}_${dateFin}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
