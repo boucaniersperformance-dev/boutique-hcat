@@ -59,6 +59,10 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
   // un double-clic).
   const [applicationTailleEnCours, setApplicationTailleEnCours] = useState({})
 
+  // Variantes (tailles) en cours de suppression, par id de variante —
+  // désactive le bouton "×" correspondant le temps de la suppression.
+  const [suppressionTailleEnCours, setSuppressionTailleEnCours] = useState({})
+
   const [produitAjoutTaille, setProduitAjoutTaille] = useState(null)
   const [nouvelleTailleAjout, setNouvelleTailleAjout] = useState('')
   const [erreurAjoutTaille, setErreurAjoutTaille] = useState(null)
@@ -322,6 +326,34 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
     }
     afficherMessage(produitAjoutTaille.id, 'Taille ajoutée ✓')
     setProduitAjoutTaille(null)
+    charger()
+  }
+
+  // Supprime une taille (variante) d'un produit — notamment pour nettoyer
+  // les doublons créés en testant les deux boutons "Âge précis" /
+  // "Tranche d'âge". Les ventes déjà enregistrées pour cette taille ne
+  // sont pas affectées (ventes_lignes.taille est un simple texte, sans
+  // lien vers variantes_produit).
+  async function supprimerTailleVariante(produit, variante) {
+    if (suppressionTailleEnCours[variante.id]) return
+    const stock = Number(variante.stock_qty) || 0
+    const message =
+      stock > 0
+        ? `Supprimer la taille "${variante.taille}" ? Il reste ${stock} en stock pour cette taille — ce stock sera perdu.`
+        : `Supprimer la taille "${variante.taille}" ?`
+    if (!window.confirm(message)) return
+
+    setSuppressionTailleEnCours((e) => ({ ...e, [variante.id]: true }))
+    const { error } = await supabase.rpc('supprimer_taille_variante', {
+      p_benevole_id: benevole.id,
+      p_variante_id: variante.id,
+    })
+    setSuppressionTailleEnCours((e) => ({ ...e, [variante.id]: false }))
+    if (error) {
+      afficherMessage(produit.id, 'Erreur de suppression')
+      return
+    }
+    afficherMessage(produit.id, 'Taille supprimée ✓')
     charger()
   }
 
@@ -1136,6 +1168,15 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                               onClick={() => ouvrirModificationTaille(produit, variante)}
                             >
                               ✏️
+                            </button>
+                            <button
+                              type="button"
+                              className="bouton-icone"
+                              title="Supprimer cette taille"
+                              disabled={!!suppressionTailleEnCours[variante.id]}
+                              onClick={() => supprimerTailleVariante(produit, variante)}
+                            >
+                              ×
                             </button>
                           </>
                         )}
