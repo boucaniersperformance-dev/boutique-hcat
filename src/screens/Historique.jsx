@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { formatEuros, resumeMatch } from '../constants.js'
+import { formatEuros, resumeMatch, comparerTailles } from '../constants.js'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 function aujourdHui() {
@@ -59,6 +59,10 @@ export default function Historique({ benevole }) {
   const [erreurSuppressionMatch, setErreurSuppressionMatch] = useState(null)
   const [suppressionMatchEnCours, setSuppressionMatchEnCours] = useState(false)
 
+  // Totaux par article (et par taille), pour le récapitulatif ajouté à
+  // l'export CSV — voir exporterCsv.
+  const [totauxArticles, setTotauxArticles] = useState([])
+
   // La touche/geste "retour" du téléphone referme ces fenêtres de
   // confirmation au lieu de faire quitter l'application.
   useFermetureRetour(!!venteASupprimer, fermerSuppression)
@@ -102,6 +106,45 @@ export default function Historique({ benevole }) {
     charger()
   }, [charger])
 
+  // Totaux par article/taille sur la même période — utilisés uniquement
+  // pour le récapitulatif ajouté à l'export CSV (voir exporterCsv).
+  const chargerTotauxArticles = useCallback(async () => {
+    const { data, error } = await supabase.rpc('totaux_articles_vendus', {
+      p_benevole_id: benevole.id,
+      p_date_debut: dateDebut,
+      p_date_fin: dateFin,
+    })
+    if (!error) setTotauxArticles(data || [])
+  }, [benevole.id, dateDebut, dateFin])
+
+  useEffect(() => {
+    chargerTotauxArticles()
+  }, [chargerTotauxArticles])
+
+  // Regroupe les lignes { nom_produit, taille, quantite } renvoyées par
+  // totaux_articles_vendus par article, avec le détail par taille trié
+  // dans l'ordre naturel (S, M, L, XL... plutôt que l'ordre alphabétique)
+  // — uniquement quand l'article a effectivement des tailles.
+  const totauxParArticle = useMemo(() => {
+    const groupes = new Map()
+    for (const ligne of totauxArticles) {
+      if (!groupes.has(ligne.nom_produit)) {
+        groupes.set(ligne.nom_produit, { nom: ligne.nom_produit, total: 0, tailles: [] })
+      }
+      const groupe = groupes.get(ligne.nom_produit)
+      groupe.total += Number(ligne.quantite)
+      if (ligne.taille) {
+        groupe.tailles.push({ taille: ligne.taille, quantite: Number(ligne.quantite) })
+      }
+    }
+    return [...groupes.values()]
+      .map((g) => ({
+        ...g,
+        tailles: g.tailles.slice().sort((a, b) => comparerTailles(a.taille, b.taille)),
+      }))
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))
+  }, [totauxArticles])
+
   const totalCB = ventes
     .filter((v) => v.mode_paiement === 'cb')
     .reduce((s, v) => s + Number(v.total), 0)
@@ -139,7 +182,28 @@ export default function Historique({ benevole }) {
       v.montant_recu ?? '',
       v.monnaie_rendue ?? '',
     ])
-    const csv = [entetes, ...lignes]
+
+    const lignesCsv = [entetes, ...lignes]
+
+    // Récapitulatif des articles vendus, ajouté à la suite du détail des
+    // ventes : une ligne par article avec son total, suivie d'une ligne
+    // par taille quand l'article en a (ex : "Sweat capuche gris chiné" :
+    // 3, puis "" / XL / 2 et "" / M / 1).
+    if (totauxParArticle.length > 0) {
+      const totalGeneralArticles = totauxParArticle.reduce((s, g) => s + g.total, 0)
+      lignesCsv.push([])
+      lignesCsv.push(['Récapitulatif des articles vendus'])
+      lignesCsv.push(['Article', 'Taille', 'Quantité'])
+      for (const groupe of totauxParArticle) {
+        lignesCsv.push([groupe.nom, '', groupe.total])
+        for (const { taille, quantite } of groupe.tailles) {
+          lignesCsv.push(['', taille, quantite])
+        }
+      }
+      lignesCsv.push(['Total', '', totalGeneralArticles])
+    }
+
+    const csv = lignesCsv
       .map((ligne) => ligne.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
       .join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
@@ -185,6 +249,7 @@ export default function Historique({ benevole }) {
     }
     setVenteASupprimer(null)
     charger()
+    chargerTotauxArticles()
   }
 
   function ouvrirSuppressionMatch(match) {
