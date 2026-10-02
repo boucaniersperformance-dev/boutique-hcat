@@ -540,6 +540,7 @@ input {
   border-radius: 20px;
   background: var(--vert);
   color: white;
+  z-index: 3;
 }
 
 .badge-stock.bas {
@@ -560,6 +561,7 @@ input {
   border-radius: 20px;
   background: var(--rouge);
   color: white;
+  z-index: 3;
 }
 
 /* ---------- Panier ---------- */
