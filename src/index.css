@@ -10,6 +10,10 @@
   --texte-clair: #6b7280;
   --bordure: #e5e7eb;
   --rayon: 14px;
+  /* Fonds discrets utilisés dans Produits pour repérer le type d'article
+     en un coup d'œil (enfant / adulte / goodies). */
+  --fond-ligne-enfant: #eaf4fb;
+  --fond-ligne-adulte: #fdf8e3;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -476,6 +480,28 @@ input {
   justify-content: center;
   overflow: hidden;
   font-size: 3.6rem;
+  position: relative;
+}
+
+/* Ruban "enfant" en diagonale sur l'angle haut-gauche de la vignette,
+   pour repérer les articles enfant d'un coup d'œil dans la page Vente. */
+.ruban-enfant {
+  position: absolute;
+  top: 11px;
+  left: -32px;
+  width: 110px;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  background: var(--bleu);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 3px 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 2;
+  pointer-events: none;
 }
 
 .produit-image img {
