@@ -922,71 +922,6 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
       </div>
 
       <div className="bloc">
-        <h2>Jeu du palet</h2>
-        <p style={{ color: 'var(--texte-clair)' }}>
-          Détermine comment se vend « Jeux du palet ». Le code de la fonction
-          complète (numéro, nom, téléphone) reste en place quel que soit le
-          choix — il suffit de le réactiver ici, aucune intervention n'est
-          nécessaire pour changer d'avis.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 640 }}>
-          {[
-            {
-              valeur: 'desactive',
-              titre: 'Désactivée',
-              description:
-                "Achat simple (2€, quantité libre) dans la page Vente, comme n'importe quel goodie. L'onglet « Jeux du palet » est masqué.",
-            },
-            {
-              valeur: 'page_seule',
-              titre: 'Page dédiée uniquement',
-              description:
-                "L'onglet « Jeux du palet » revient (choix du numéro, nom, téléphone). Dans la page Vente, l'article reste un achat simple.",
-            },
-            {
-              valeur: 'complet',
-              titre: 'Complète',
-              description:
-                'Choix du numéro, nom et téléphone à la fois dans la page Vente (en une seule fenêtre, combinable avec le reste du panier) et dans l\'onglet dédié.',
-            },
-          ].map((option) => (
-            <label
-              key={option.valeur}
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 10,
-                padding: '10px 14px',
-                borderRadius: 10,
-                border: '1px solid var(--bordure)',
-                background: 'var(--fond)',
-                cursor: modePaletEnCours ? 'default' : 'pointer',
-              }}
-            >
-              <input
-                type="radio"
-                name="mode-jeu-palet"
-                style={{ width: 18, height: 18, flexShrink: 0, marginTop: 2 }}
-                checked={jeuPaletMode === option.valeur}
-                disabled={modePaletEnCours}
-                onChange={() => changerModeJeuPalet(option.valeur)}
-              />
-              <span>
-                <b>{option.titre}</b>
-                <br />
-                <span style={{ color: 'var(--texte-clair)', fontSize: '0.85rem' }}>
-                  {option.description}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-        {modePaletEnCours && (
-          <p style={{ color: 'var(--texte-clair)', marginTop: 10 }}>Enregistrement…</p>
-        )}
-      </div>
-
-      <div className="bloc">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <h2 style={{ margin: 0 }}>Gestion des produits</h2>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -1422,6 +1357,71 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
               </table>
             )}
           </div>
+        )}
+      </div>
+
+      <div className="bloc">
+        <h2>Jeu du palet</h2>
+        <p style={{ color: 'var(--texte-clair)' }}>
+          Détermine comment se vend « Jeux du palet ». Le code de la fonction
+          complète (numéro, nom, téléphone) reste en place quel que soit le
+          choix — il suffit de le réactiver ici, aucune intervention n'est
+          nécessaire pour changer d'avis.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 640 }}>
+          {[
+            {
+              valeur: 'desactive',
+              titre: 'Désactivée',
+              description:
+                "Achat simple (2€, quantité libre) dans la page Vente, comme n'importe quel goodie. L'onglet « Jeux du palet » est masqué.",
+            },
+            {
+              valeur: 'page_seule',
+              titre: 'Page dédiée uniquement',
+              description:
+                "L'onglet « Jeux du palet » revient (choix du numéro, nom, téléphone). Dans la page Vente, l'article reste un achat simple.",
+            },
+            {
+              valeur: 'complet',
+              titre: 'Complète',
+              description:
+                'Choix du numéro, nom et téléphone à la fois dans la page Vente (en une seule fenêtre, combinable avec le reste du panier) et dans l\'onglet dédié.',
+            },
+          ].map((option) => (
+            <label
+              key={option.valeur}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                padding: '10px 14px',
+                borderRadius: 10,
+                border: '1px solid var(--bordure)',
+                background: 'var(--fond)',
+                cursor: modePaletEnCours ? 'default' : 'pointer',
+              }}
+            >
+              <input
+                type="radio"
+                name="mode-jeu-palet"
+                style={{ width: 18, height: 18, flexShrink: 0, marginTop: 2 }}
+                checked={jeuPaletMode === option.valeur}
+                disabled={modePaletEnCours}
+                onChange={() => changerModeJeuPalet(option.valeur)}
+              />
+              <span>
+                <b>{option.titre}</b>
+                <br />
+                <span style={{ color: 'var(--texte-clair)', fontSize: '0.85rem' }}>
+                  {option.description}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {modePaletEnCours && (
+          <p style={{ color: 'var(--texte-clair)', marginTop: 10 }}>Enregistrement…</p>
         )}
       </div>
 
