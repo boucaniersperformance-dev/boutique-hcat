@@ -64,6 +64,10 @@ export default function Historique({ benevole }) {
   // l'export CSV — voir exporterCsv.
   const [totauxArticles, setTotauxArticles] = useState([])
 
+  // Comptages de caisse (page Caisse Espèces) sur la période, pour le
+  // tableau de rapprochement ajouté à l'export Excel — voir caisseParJour.
+  const [comptagesCaisse, setComptagesCaisse] = useState([])
+
   // La touche/geste "retour" du téléphone referme ces fenêtres de
   // confirmation au lieu de faire quitter l'application.
   useFermetureRetour(!!venteASupprimer, fermerSuppression)
@@ -122,6 +126,22 @@ export default function Historique({ benevole }) {
     chargerTotauxArticles()
   }, [chargerTotauxArticles])
 
+  // Comptages de caisse sur la même période (fond de caisse + total compté
+  // par jour) — utilisés uniquement pour le tableau de rapprochement
+  // ajouté à l'export Excel (voir caisseParJour / exporterExcel).
+  const chargerComptagesCaisse = useCallback(async () => {
+    const { data, error } = await supabase.rpc('lister_comptages_caisse', {
+      p_benevole_id: benevole.id,
+      p_date_debut: dateDebut,
+      p_date_fin: dateFin,
+    })
+    if (!error) setComptagesCaisse(data || [])
+  }, [benevole.id, dateDebut, dateFin])
+
+  useEffect(() => {
+    chargerComptagesCaisse()
+  }, [chargerComptagesCaisse])
+
   // Regroupe les lignes { nom_produit, taille, quantite } renvoyées par
   // totaux_articles_vendus par article, avec le détail par taille trié
   // dans l'ordre naturel (S, M, L, XL... plutôt que l'ordre alphabétique)
@@ -172,6 +192,38 @@ export default function Historique({ benevole }) {
       }))
   }, [ventes])
 
+  // Total des ventes en espèces par jour (AAAA-MM-JJ local), pour
+  // rapprocher chaque comptage de caisse du total que le système attendait
+  // ce jour-là — voir caisseParJour.
+  const especesParJourLocal = useMemo(() => {
+    const totaux = new Map()
+    for (const v of ventes) {
+      if (v.mode_paiement !== 'especes') continue
+      const jour = jourLocal(v.cree_le)
+      totaux.set(jour, (totaux.get(jour) || 0) + Number(v.total))
+    }
+    return totaux
+  }, [ventes])
+
+  // Un comptage de caisse par jour (voir la page Caisse Espèces), avec le
+  // total espèces des ventes enregistrées ce jour-là et l'écart entre les
+  // deux — pour le tableau de rapprochement ajouté à l'export Excel. Seuls
+  // les jours où un comptage a effectivement été fait apparaissent ici.
+  const caisseParJour = useMemo(() => {
+    return comptagesCaisse
+      .map((c) => {
+        const totalEspecesVentes = especesParJourLocal.get(c.jour) || 0
+        return {
+          jour: c.jour,
+          fondDeCaisse: Number(c.fond_de_caisse),
+          totalCompte: Number(c.total_compte),
+          totalEspecesVentes,
+          ecart: Number(c.total_compte) - Number(c.fond_de_caisse) - totalEspecesVentes,
+        }
+      })
+      .sort((a, b) => (a.jour < b.jour ? -1 : 1))
+  }, [comptagesCaisse, especesParJourLocal])
+
   // Classeur Excel mis en forme (bandeau de couleur, récapitulatif de la
   // période en tout premier, tableaux encadrés, montants en euros) — voir
   // exportVentesExcel.js pour le détail de la construction. C'est un vrai
@@ -183,6 +235,7 @@ export default function Historique({ benevole }) {
       dateFin,
       ventes,
       totauxParArticle,
+      caisseParJour,
     })
     const blob = new Blob([octets], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
