@@ -14,6 +14,13 @@ import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 const BUCKET_PHOTOS = 'produits-photos'
 
+// Jeux de tailles standard enfant, pour les boutons "Âge précis" /
+// "Tranche d'âge" qui ajoutent en un clic toutes les tailles manquantes
+// de l'un ou l'autre système (voir appliquerTaillesStandard) — sans
+// jamais toucher aux tailles déjà présentes sur le produit.
+const TAILLES_ENFANT_AGE_PRECIS = ['6 ans', '8 ans', '10 ans', '12 ans']
+const TAILLES_ENFANT_PLAGE_AGE = ['3-4 ans', '5-6 ans', '7-8 ans', '9-11 ans', '12-13 ans']
+
 export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPaletMode }) {
   const [produits, setProduits] = useState([])
   const [modePaletEnCours, setModePaletEnCours] = useState(false)
@@ -46,6 +53,11 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
   const [nouvelleTailleTexte, setNouvelleTailleTexte] = useState('')
   const [erreurTaille, setErreurTaille] = useState(null)
   const [actionTailleEnCours, setActionTailleEnCours] = useState(false)
+
+  // Produits pour lesquels un clic sur "Âge précis" / "Tranche d'âge" est
+  // en cours (désactive les deux boutons le temps de l'ajout, pour éviter
+  // un double-clic).
+  const [applicationTailleEnCours, setApplicationTailleEnCours] = useState({})
 
   const [produitAjoutTaille, setProduitAjoutTaille] = useState(null)
   const [nouvelleTailleAjout, setNouvelleTailleAjout] = useState('')
@@ -310,6 +322,40 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
     }
     afficherMessage(produitAjoutTaille.id, 'Taille ajoutée ✓')
     setProduitAjoutTaille(null)
+    charger()
+  }
+
+  // Ajoute en un clic toutes les tailles manquantes du jeu standard choisi
+  // ("6 ans, 8 ans, 10 ans, 12 ans" ou "3-4, 5-6, 7-8, 9-11, 12-13 ans"),
+  // sans jamais toucher aux tailles déjà présentes sur le produit (ni leur
+  // stock) — pratique pour passer d'un système à l'autre, ou simplement
+  // compléter un produit créé avant que ce jeu de tailles n'existe.
+  async function appliquerTaillesStandard(produit, mode) {
+    if (applicationTailleEnCours[produit.id]) return
+    const cible = mode === 'plage_age' ? TAILLES_ENFANT_PLAGE_AGE : TAILLES_ENFANT_AGE_PRECIS
+    const dejaPresentes = new Set(
+      (produit.variantes_produit || []).map((v) => v.taille).filter(Boolean)
+    )
+    const manquantes = cible.filter((taille) => !dejaPresentes.has(taille))
+    if (manquantes.length === 0) {
+      afficherMessage(produit.id, 'Déjà à jour ✓')
+      return
+    }
+    setApplicationTailleEnCours((e) => ({ ...e, [produit.id]: true }))
+    let echecs = 0
+    for (const taille of manquantes) {
+      const { error } = await supabase.rpc('ajouter_taille_variante', {
+        p_benevole_id: benevole.id,
+        p_produit_id: produit.id,
+        p_taille: taille,
+      })
+      if (error) echecs += 1
+    }
+    setApplicationTailleEnCours((e) => ({ ...e, [produit.id]: false }))
+    afficherMessage(
+      produit.id,
+      echecs > 0 ? `${manquantes.length - echecs}/${manquantes.length} taille(s) ajoutée(s)` : 'Tailles ajoutées ✓'
+    )
     charger()
   }
 
@@ -1114,6 +1160,30 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                     >
                       + Ajouter une taille
                     </button>
+                  )}
+                  {produit.jeu_tailles === 'enfant' && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <button
+                        type="button"
+                        className="bouton-secondaire"
+                        style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                        disabled={!!applicationTailleEnCours[produit.id]}
+                        onClick={() => appliquerTaillesStandard(produit, 'age_precis')}
+                        title="Ajoute les tailles manquantes parmi : 6 ans, 8 ans, 10 ans, 12 ans"
+                      >
+                        Âge précis
+                      </button>
+                      <button
+                        type="button"
+                        className="bouton-secondaire"
+                        style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                        disabled={!!applicationTailleEnCours[produit.id]}
+                        onClick={() => appliquerTaillesStandard(produit, 'plage_age')}
+                        title="Ajoute les tailles manquantes parmi : 3-4, 5-6, 7-8, 9-11, 12-13 ans"
+                      >
+                        Tranche d'âge
+                      </button>
+                    </div>
                   )}
                 </td>
                 <td>
