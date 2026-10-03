@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { formatEuros, taillesPourJeu, SEUIL_STOCK_BAS, photosProduit } from '../constants.js'
+import { formatEuros, comparerTailles, SEUIL_STOCK_BAS, photosProduit } from '../constants.js'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 // Modale d'ajout au panier : demande la taille (si nécessaire) puis la quantité.
@@ -8,8 +8,20 @@ export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFer
   // faire quitter l'application.
   useFermetureRetour(true, onFermer)
 
+  // Les tailles proposées ici viennent des déclinaisons réellement créées
+  // sur le produit (onglet Produits) — jamais d'une liste figée — pour que
+  // ce qui s'affiche au clic corresponde toujours à ce qui est configuré
+  // (y compris les tailles ajoutées à la main ou via "Âge précis" /
+  // "Tranche d'âge"). Une taille épuisée reste listée (grisée) plutôt que
+  // masquée, pour rester sélectionnable si le stock réel diffère.
   const tailles = useMemo(
-    () => (produit.necessite_taille ? taillesPourJeu(produit.jeu_tailles) : []),
+    () =>
+      produit.necessite_taille
+        ? (produit.variantes_produit || [])
+            .map((v) => v.taille)
+            .filter(Boolean)
+            .sort(comparerTailles)
+        : [],
     [produit]
   )
   const photos = useMemo(() => photosProduit(produit), [produit])
