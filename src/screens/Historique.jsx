@@ -61,12 +61,20 @@ export default function Historique({ benevole }) {
   const [suppressionMatchEnCours, setSuppressionMatchEnCours] = useState(false)
 
   // Totaux par article (et par taille), pour le récapitulatif ajouté à
-  // l'export CSV — voir exporterCsv.
+  // l'export CSV — voir exporterCsv. Ces deux jeux de données se chargent
+  // en tâche de fond (ils ne s'affichent nulle part à l'écran, seulement
+  // dans l'export) : `chargementTotauxArticles`/`chargementComptagesCaisse`
+  // permettent de ne jamais lancer un export tant qu'ils ne sont pas prêts
+  // — sans ça, cliquer "Exporter" juste après un changement de dates (ou au
+  // chargement de la page) pouvait produire un fichier avec ces tableaux
+  // manquants, l'état encore à sa valeur vide initiale.
   const [totauxArticles, setTotauxArticles] = useState([])
+  const [chargementTotauxArticles, setChargementTotauxArticles] = useState(true)
 
   // Comptages de caisse (page Caisse Espèces) sur la période, pour le
   // tableau de rapprochement ajouté à l'export Excel — voir caisseParJour.
   const [comptagesCaisse, setComptagesCaisse] = useState([])
+  const [chargementComptagesCaisse, setChargementComptagesCaisse] = useState(true)
 
   // La touche/geste "retour" du téléphone referme ces fenêtres de
   // confirmation au lieu de faire quitter l'application.
@@ -114,12 +122,14 @@ export default function Historique({ benevole }) {
   // Totaux par article/taille sur la même période — utilisés uniquement
   // pour le récapitulatif ajouté à l'export CSV (voir exporterCsv).
   const chargerTotauxArticles = useCallback(async () => {
+    setChargementTotauxArticles(true)
     const { data, error } = await supabase.rpc('totaux_articles_vendus', {
       p_benevole_id: benevole.id,
       p_date_debut: dateDebut,
       p_date_fin: dateFin,
     })
     if (!error) setTotauxArticles(data || [])
+    setChargementTotauxArticles(false)
   }, [benevole.id, dateDebut, dateFin])
 
   useEffect(() => {
@@ -130,12 +140,14 @@ export default function Historique({ benevole }) {
   // par jour) — utilisés uniquement pour le tableau de rapprochement
   // ajouté à l'export Excel (voir caisseParJour / exporterExcel).
   const chargerComptagesCaisse = useCallback(async () => {
+    setChargementComptagesCaisse(true)
     const { data, error } = await supabase.rpc('lister_comptages_caisse', {
       p_benevole_id: benevole.id,
       p_date_debut: dateDebut,
       p_date_fin: dateFin,
     })
     if (!error) setComptagesCaisse(data || [])
+    setChargementComptagesCaisse(false)
   }, [benevole.id, dateDebut, dateFin])
 
   useEffect(() => {
@@ -354,8 +366,21 @@ export default function Historique({ benevole }) {
           <label>Au</label>
           <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
         </div>
-        <button className="bouton-secondaire" onClick={exporterExcel} disabled={ventes.length === 0}>
-          📊 Exporter en Excel
+        <button
+          className="bouton-secondaire"
+          onClick={exporterExcel}
+          disabled={
+            ventes.length === 0 || chargementTotauxArticles || chargementComptagesCaisse
+          }
+          title={
+            chargementTotauxArticles || chargementComptagesCaisse
+              ? 'Préparation des données de l\'export…'
+              : undefined
+          }
+        >
+          {chargementTotauxArticles || chargementComptagesCaisse
+            ? '⏳ Préparation…'
+            : '📊 Exporter en Excel'}
         </button>
       </div>
 
