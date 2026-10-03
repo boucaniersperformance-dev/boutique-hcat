@@ -70,11 +70,17 @@ export default function Historique({ benevole }) {
   // manquants, l'état encore à sa valeur vide initiale.
   const [totauxArticles, setTotauxArticles] = useState([])
   const [chargementTotauxArticles, setChargementTotauxArticles] = useState(true)
+  // Erreur éventuelle du chargement du récapitulatif articles — affichée
+  // près du bouton d'export (au lieu d'être ignorée en silence) pour
+  // pouvoir diagnostiquer un export qui "oublie" ce tableau sans qu'il
+  // s'agisse forcément d'une simple lenteur de chargement.
+  const [erreurTotauxArticles, setErreurTotauxArticles] = useState(null)
 
   // Comptages de caisse (page Caisse Espèces) sur la période, pour le
   // tableau de rapprochement ajouté à l'export Excel — voir caisseParJour.
   const [comptagesCaisse, setComptagesCaisse] = useState([])
   const [chargementComptagesCaisse, setChargementComptagesCaisse] = useState(true)
+  const [erreurComptagesCaisse, setErreurComptagesCaisse] = useState(null)
 
   // La touche/geste "retour" du téléphone referme ces fenêtres de
   // confirmation au lieu de faire quitter l'application.
@@ -123,12 +129,17 @@ export default function Historique({ benevole }) {
   // pour le récapitulatif ajouté à l'export CSV (voir exporterCsv).
   const chargerTotauxArticles = useCallback(async () => {
     setChargementTotauxArticles(true)
+    setErreurTotauxArticles(null)
     const { data, error } = await supabase.rpc('totaux_articles_vendus', {
       p_benevole_id: benevole.id,
       p_date_debut: dateDebut,
       p_date_fin: dateFin,
     })
-    if (!error) setTotauxArticles(data || [])
+    if (error) {
+      setErreurTotauxArticles(error.message || 'Erreur inconnue')
+    } else {
+      setTotauxArticles(data || [])
+    }
     setChargementTotauxArticles(false)
   }, [benevole.id, dateDebut, dateFin])
 
@@ -141,12 +152,17 @@ export default function Historique({ benevole }) {
   // ajouté à l'export Excel (voir caisseParJour / exporterExcel).
   const chargerComptagesCaisse = useCallback(async () => {
     setChargementComptagesCaisse(true)
+    setErreurComptagesCaisse(null)
     const { data, error } = await supabase.rpc('lister_comptages_caisse', {
       p_benevole_id: benevole.id,
       p_date_debut: dateDebut,
       p_date_fin: dateFin,
     })
-    if (!error) setComptagesCaisse(data || [])
+    if (error) {
+      setErreurComptagesCaisse(error.message || 'Erreur inconnue')
+    } else {
+      setComptagesCaisse(data || [])
+    }
     setChargementComptagesCaisse(false)
   }, [benevole.id, dateDebut, dateFin])
 
@@ -383,6 +399,15 @@ export default function Historique({ benevole }) {
             : '📊 Exporter en Excel'}
         </button>
       </div>
+
+      {(erreurTotauxArticles || erreurComptagesCaisse) && (
+        <p className="erreur">
+          {erreurTotauxArticles && (
+            <>Récapitulatif articles : {erreurTotauxArticles}<br /></>
+          )}
+          {erreurComptagesCaisse && <>Comptages caisse : {erreurComptagesCaisse}</>}
+        </p>
+      )}
 
       {chargement && <p className="chargement">Chargement…</p>}
       {erreur && <p className="erreur">{erreur}</p>}
