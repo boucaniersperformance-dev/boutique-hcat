@@ -10,6 +10,8 @@ const PIECES = [
   { cle: 'pieces_10c', label: '10 centimes', valeur: 0.1 },
   { cle: 'pieces_20c', label: '20 centimes', valeur: 0.2 },
   { cle: 'pieces_50c', label: '50 centimes', valeur: 0.5 },
+  { cle: 'pieces_1e', label: '1 €', valeur: 1 },
+  { cle: 'pieces_2e', label: '2 €', valeur: 2 },
 ]
 
 const BILLETS = [
@@ -59,6 +61,8 @@ export default function CaisseEspeces({ benevole }) {
             pieces_10c: comptage.pieces_10c,
             pieces_20c: comptage.pieces_20c,
             pieces_50c: comptage.pieces_50c,
+            pieces_1e: comptage.pieces_1e,
+            pieces_2e: comptage.pieces_2e,
             billets_5: comptage.billets_5,
             billets_10: comptage.billets_10,
             billets_20: comptage.billets_20,
@@ -98,6 +102,8 @@ export default function CaisseEspeces({ benevole }) {
       p_pieces_10c: quantites.pieces_10c,
       p_pieces_20c: quantites.pieces_20c,
       p_pieces_50c: quantites.pieces_50c,
+      p_pieces_1e: quantites.pieces_1e,
+      p_pieces_2e: quantites.pieces_2e,
       p_billets_5: quantites.billets_5,
       p_billets_10: quantites.billets_10,
       p_billets_20: quantites.billets_20,
