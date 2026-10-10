@@ -66,6 +66,14 @@ export default function PaiementModal({ total, onValider, onFermer, enCours }) {
                 placeholder="0.00"
               />
             </div>
+            <button
+              type="button"
+              className="bouton-secondaire"
+              style={{ width: '100%', marginBottom: 12 }}
+              onClick={() => setMontantRecuStr(String(total))}
+            >
+              💰 Montant exact (le client a l'appoint)
+            </button>
             {montantRecuValide && (
               <div className="recap-monnaie">
                 <div>Monnaie à rendre</div>
