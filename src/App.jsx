@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ensureSupabaseSession, supabase } from './supabaseClient'
 import Login from './screens/Login.jsx'
 import Vente from './screens/Vente.jsx'
+import Commande from './screens/Commande.jsx'
 import AdminProduits from './screens/AdminProduits.jsx'
 import AdminBenevoles from './screens/AdminBenevoles.jsx'
 import Historique from './screens/Historique.jsx'
@@ -142,6 +143,12 @@ export default function App() {
           >
             Gourde
           </button>
+          <button
+            className={ecran === 'commande' ? 'actif' : ''}
+            onClick={() => setEcran('commande')}
+          >
+            Commande
+          </button>
           {estResponsable && (
             <>
               <button
@@ -183,6 +190,7 @@ export default function App() {
         {ecran === 'vente' && <Vente benevole={benevole} jeuPaletMode={jeuPaletMode} />}
         {ecran === 'palet' && jeuPaletMode !== 'desactive' && <JeuPalet benevole={benevole} />}
         {ecran === 'gourde' && <GourdePerso benevole={benevole} />}
+        {ecran === 'commande' && <Commande benevole={benevole} />}
         {ecran === 'produits' && estResponsable && (
           <AdminProduits
             benevole={benevole}
