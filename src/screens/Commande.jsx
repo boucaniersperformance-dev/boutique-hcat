@@ -28,6 +28,20 @@ function cleLigne(produitId, taille) {
 export default function Commande({ benevole }) {
   const estResponsable = benevole.role === 'responsable'
 
+  // --- Bouton "Remonter en haut" : apparaît dès qu'on a défilé un peu,
+  // pratique sur cette page qui peut être longue (catalogue + suivi).
+  const [afficherBoutonHaut, setAfficherBoutonHaut] = useState(false)
+  useEffect(() => {
+    function auScroll() {
+      setAfficherBoutonHaut(window.scrollY > 300)
+    }
+    window.addEventListener('scroll', auScroll)
+    return () => window.removeEventListener('scroll', auScroll)
+  }, [])
+  function remonterEnHaut() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   // --- Catalogue : tout le catalogue actif (non archivé, non supprimé),
   // qu'il soit ou non actuellement "mis en vente" — c'est justement pour
   // commander ce qui n'est pas disponible là, tout de suite.
@@ -284,6 +298,9 @@ export default function Commande({ benevole }) {
                   onClick={() => setProduitOuvert(produit)}
                 >
                   <div className="produit-image">
+                    {categorieProduit(produit) === 'enfant' && (
+                      <span className="ruban-enfant">Enfant</span>
+                    )}
                     {photos.length ? <img src={photos[0]} alt={produit.nom} /> : '🛍️'}
                   </div>
                   <div className="produit-nom">{produit.nom}</div>
@@ -427,6 +444,18 @@ export default function Commande({ benevole }) {
             </div>
           )}
         </div>
+      )}
+
+      {afficherBoutonHaut && (
+        <button
+          type="button"
+          className="bouton-remonter"
+          onClick={remonterEnHaut}
+          aria-label="Remonter en haut de la page"
+          title="Remonter en haut de la page"
+        >
+          ⬆️
+        </button>
       )}
     </>
   )
