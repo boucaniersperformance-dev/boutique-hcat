@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ensureSupabaseSession, supabase } from './supabaseClient'
+import { ensureSupabaseSession, estUneSessionGoogle, supabase } from './supabaseClient'
 import Login from './screens/Login.jsx'
 import Vente from './screens/Vente.jsx'
 import Commande from './screens/Commande.jsx'
 import AdminProduits from './screens/AdminProduits.jsx'
 import AdminBenevoles from './screens/AdminBenevoles.jsx'
+import Reapprovisionnement from './screens/Reapprovisionnement.jsx'
 import Historique from './screens/Historique.jsx'
 import JeuPalet from './screens/JeuPalet.jsx'
 import CaisseEspeces from './screens/CaisseEspeces.jsx'
@@ -31,6 +32,11 @@ export default function App() {
   // savoir si elle est vraiment activée.
   const [jeuPaletMode, setJeuPaletMode] = useState('desactive')
 
+  // Connexion Google : le temps de vérifier l'adresse (après retour de
+  // Google) et le message d'erreur si elle n'est pas autorisée.
+  const [verificationGoogle, setVerificationGoogle] = useState(false)
+  const [erreurGoogle, setErreurGoogle] = useState(null)
+
   useEffect(() => {
     ensureSupabaseSession()
       .then(() => setPret(true))
@@ -48,7 +54,54 @@ export default function App() {
     setEcran('vente')
   }
 
-  function deconnecter() {
+  // Dès que l'appli est prête et qu'aucun bénévole n'est encore choisi
+  // sur cette tablette, on regarde si la session Supabase est une vraie
+  // connexion Google (cas du retour de redirection depuis Google, ou
+  // d'une session Google restée ouverte) — si oui, on tente de
+  // reconnaître automatiquement le responsable correspondant, sans lui
+  // demander de code.
+  useEffect(() => {
+    if (!pret || benevole) return
+    let annule = false
+    async function tenterConnexionGoogle() {
+      const { data } = await supabase.auth.getSession()
+      if (annule || !estUneSessionGoogle(data.session)) return
+      setVerificationGoogle(true)
+      setErreurGoogle(null)
+      const { data: resultat, error } = await supabase.rpc('connecter_via_google')
+      if (annule) return
+      setVerificationGoogle(false)
+      const ligne = Array.isArray(resultat) ? resultat[0] : resultat
+      if (error || !ligne) {
+        setErreurGoogle(
+          error?.message ||
+            "La connexion Google a échoué. Réessaie, ou utilise ton code PIN."
+        )
+        return
+      }
+      connecter({ id: ligne.id, nom: ligne.nom, role: ligne.role })
+    }
+    tenterConnexionGoogle()
+    return () => {
+      annule = true
+    }
+  }, [pret, benevole])
+
+  // Abandonne une session Google refusée (adresse non autorisée, compte
+  // désactivé…) : on se déconnecte complètement de Google et on rouvre
+  // une session anonyme, pour retrouver l'écran de connexion normal
+  // (tuiles + code PIN) plutôt que de rester bloqué sur l'erreur.
+  async function abandonnerConnexionGoogle() {
+    setErreurGoogle(null)
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // ignoré : on tente quand même de rouvrir une session anonyme
+    }
+    await supabase.auth.signInAnonymously().catch(() => {})
+  }
+
+  async function deconnecter() {
     // Invalide la liaison de session côté serveur (best-effort : même si
     // l'appel échoue — réseau coupé, etc. — on déconnecte quand même
     // localement ; la session serveur expirera de toute façon au bout de
@@ -58,6 +111,16 @@ export default function App() {
     }
     setBenevole(null)
     sessionStorage.removeItem(CLE_SESSION)
+
+    // Si ce bénévole s'était connecté avec un vrai compte Google, il faut
+    // aussi fermer cette session-là (pas seulement la liaison côté appli)
+    // — sinon le prochain bénévole qui touche "Changer de bénévole" sur
+    // cette même tablette serait reconnecté automatiquement à sa place.
+    const { data } = await supabase.auth.getSession()
+    if (estUneSessionGoogle(data.session)) {
+      await supabase.auth.signOut().catch(() => {})
+      await supabase.auth.signInAnonymously().catch(() => {})
+    }
   }
 
   // Charge le réglage du jeu du palet une fois connecté (une tablette qui
@@ -96,7 +159,10 @@ export default function App() {
   // de vente.
   useEffect(() => {
     const estResponsable = benevole?.role === 'responsable'
-    if (!estResponsable && ['produits', 'benevoles', 'historique', 'caisse'].includes(ecran)) {
+    if (
+      !estResponsable &&
+      ['produits', 'benevoles', 'historique', 'caisse', 'reappro'].includes(ecran)
+    ) {
       setEcran('vente')
     }
   }, [benevole, ecran])
@@ -112,8 +178,23 @@ export default function App() {
     )
   }
 
-  if (!pret) {
+  if (!pret || verificationGoogle) {
     return <div className="chargement">Chargement…</div>
+  }
+
+  if (erreurGoogle) {
+    return (
+      <div className="login-ecran">
+        <div className="login-carte">
+          <img src="/logo.png" alt="Boucaniers" className="logo-login" />
+          <h1>Connexion Google refusée</h1>
+          <p className="erreur">{erreurGoogle}</p>
+          <button className="bouton-principal" onClick={abandonnerConnexionGoogle}>
+            Retour à l'écran de connexion
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (!benevole) {
@@ -171,6 +252,12 @@ export default function App() {
                 Bénévoles
               </button>
               <button
+                className={ecran === 'reappro' ? 'actif' : ''}
+                onClick={() => setEcran('reappro')}
+              >
+                Réapprovisionnement
+              </button>
+              <button
                 className={ecran === 'historique' ? 'actif' : ''}
                 onClick={() => setEcran('historique')}
               >
@@ -207,6 +294,9 @@ export default function App() {
         )}
         {ecran === 'benevoles' && estResponsable && (
           <AdminBenevoles benevole={benevole} />
+        )}
+        {ecran === 'reappro' && estResponsable && (
+          <Reapprovisionnement benevole={benevole} />
         )}
         {ecran === 'historique' && estResponsable && (
           <Historique benevole={benevole} />
