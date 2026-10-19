@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient'
+import { supabase, connecterAvecGoogle } from '../supabaseClient'
 
 const LONGUEUR_PIN = 4
 
@@ -11,6 +11,8 @@ export default function Login({ onConnecte }) {
   const [pin, setPin] = useState('')
   const [erreurPin, setErreurPin] = useState(null)
   const [verification, setVerification] = useState(false)
+  const [lancementGoogleEnCours, setLancementGoogleEnCours] = useState(false)
+  const [erreurGoogle, setErreurGoogle] = useState(null)
 
   useEffect(() => {
     let annule = false
@@ -85,6 +87,22 @@ export default function Login({ onConnecte }) {
     onConnecte({ id: selectionne.id, nom: resultat.nom, role: resultat.role })
   }
 
+  async function lancerConnexionGoogle() {
+    setErreurGoogle(null)
+    setLancementGoogleEnCours(true)
+    try {
+      // Redirige le navigateur vers Google — si tout se passe bien, cette
+      // page quitte avant que cette fonction n'ait besoin de faire quoi
+      // que ce soit d'autre (le retour est géré par App.jsx).
+      await connecterAvecGoogle()
+    } catch (err) {
+      setLancementGoogleEnCours(false)
+      setErreurGoogle(
+        err?.message || "Impossible de lancer la connexion Google. Réessaie."
+      )
+    }
+  }
+
   return (
     <div className="login-ecran">
       <div className="login-carte">
@@ -111,6 +129,23 @@ export default function Login({ onConnecte }) {
                 {b.nom}
               </button>
             ))}
+          </div>
+        )}
+
+        {!chargement && !erreurListe && !selectionne && (
+          <div className="connexion-google-zone" style={{ marginTop: 18 }}>
+            <button
+              type="button"
+              className="bouton-secondaire"
+              disabled={lancementGoogleEnCours}
+              onClick={lancerConnexionGoogle}
+              style={{ width: '100%' }}
+            >
+              {lancementGoogleEnCours
+                ? 'Redirection vers Google…'
+                : 'Se connecter avec Google (responsables)'}
+            </button>
+            {erreurGoogle && <p className="erreur">{erreurGoogle}</p>}
           </div>
         )}
 
