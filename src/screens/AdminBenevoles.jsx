@@ -21,6 +21,17 @@ export default function AdminBenevoles({ benevole }) {
   // Codes PIN révélés à l'écran : { [id]: '1234' | 'indisponible' | 'chargement' }
   const [pinsVisibles, setPinsVisibles] = useState({})
 
+  // Liste blanche des adresses Gmail autorisées à se connecter en tant
+  // que responsable (voir le bloc "Connexion Google" en bas de l'écran).
+  const [emailsAutorises, setEmailsAutorises] = useState([])
+  const [chargementEmails, setChargementEmails] = useState(true)
+  const [erreurEmails, setErreurEmails] = useState(null)
+  const [nouvelEmail, setNouvelEmail] = useState('')
+  const [nouveauNomEmail, setNouveauNomEmail] = useState('')
+  const [ajoutEmailEnCours, setAjoutEmailEnCours] = useState(false)
+  const [erreurAjoutEmail, setErreurAjoutEmail] = useState(null)
+  const [actionEmailEnCours, setActionEmailEnCours] = useState({})
+
   const charger = useCallback(async () => {
     setErreur(null)
     const { data, error } = await supabase.rpc('lister_benevoles', {
@@ -37,6 +48,89 @@ export default function AdminBenevoles({ benevole }) {
   useEffect(() => {
     charger()
   }, [charger])
+
+  const chargerEmails = useCallback(async () => {
+    setErreurEmails(null)
+    const { data, error } = await supabase.rpc('lister_emails_autorises', {
+      p_benevole_id: benevole.id,
+    })
+    if (error) {
+      setErreurEmails("Impossible de charger la liste des adresses Gmail autorisées.")
+    } else {
+      setEmailsAutorises(data || [])
+    }
+    setChargementEmails(false)
+  }, [benevole.id])
+
+  useEffect(() => {
+    chargerEmails()
+  }, [chargerEmails])
+
+  async function ajouterEmailAutorise(e) {
+    e.preventDefault()
+    setErreurAjoutEmail(null)
+    const email = nouvelEmail.trim()
+    const nom = nouveauNomEmail.trim()
+    if (!email || !email.includes('@')) {
+      setErreurAjoutEmail('Adresse e-mail invalide.')
+      return
+    }
+    if (!nom) {
+      setErreurAjoutEmail('Le nom est obligatoire.')
+      return
+    }
+    setAjoutEmailEnCours(true)
+    const { error } = await supabase.rpc('ajouter_email_autorise', {
+      p_benevole_id: benevole.id,
+      p_email: email,
+      p_nom: nom,
+    })
+    setAjoutEmailEnCours(false)
+    if (error) {
+      setErreurAjoutEmail(error.message || "Erreur lors de l'ajout.")
+      return
+    }
+    setNouvelEmail('')
+    setNouveauNomEmail('')
+    chargerEmails()
+  }
+
+  async function basculerActifEmail(ligne) {
+    setActionEmailEnCours((e) => ({ ...e, [ligne.email]: true }))
+    const { error } = await supabase.rpc('definir_email_autorise_actif', {
+      p_benevole_id: benevole.id,
+      p_email: ligne.email,
+      p_actif: !ligne.actif,
+    })
+    setActionEmailEnCours((e) => ({ ...e, [ligne.email]: false }))
+    if (error) {
+      window.alert(error.message || 'Erreur lors du changement de statut.')
+      return
+    }
+    chargerEmails()
+  }
+
+  async function supprimerEmailAutorise(ligne) {
+    const confirme = window.confirm(
+      `Retirer ${ligne.email} de la liste blanche ? ${
+        ligne.deja_connecte
+          ? "Le compte bénévole déjà créé pour cette adresse n'est pas supprimé (gère-le depuis la liste ci-dessus si besoin) — seule sa capacité à se reconnecter avec Google est retirée."
+          : ''
+      }`
+    )
+    if (!confirme) return
+    setActionEmailEnCours((e) => ({ ...e, [ligne.email]: true }))
+    const { error } = await supabase.rpc('supprimer_email_autorise', {
+      p_benevole_id: benevole.id,
+      p_email: ligne.email,
+    })
+    setActionEmailEnCours((e) => ({ ...e, [ligne.email]: false }))
+    if (error) {
+      window.alert(error.message || 'Erreur lors de la suppression.')
+      return
+    }
+    chargerEmails()
+  }
 
   async function creerBenevole(e) {
     e.preventDefault()
@@ -266,6 +360,7 @@ export default function AdminBenevoles({ benevole }) {
               <th>Rôle</th>
               <th>Statut</th>
               <th>Verrouillage</th>
+              <th>Gmail</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -333,6 +428,13 @@ export default function AdminBenevoles({ benevole }) {
                     )}
                   </td>
                   <td>
+                    {b.email ? (
+                      <span style={{ fontSize: '0.82rem' }}>{b.email}</span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>
                     <button
                       className="bouton-icone"
                       title="Modifier"
@@ -352,7 +454,7 @@ export default function AdminBenevoles({ benevole }) {
                 </tr>
                 {ligneOuverte === b.id && (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <div className="panneau-edition">
                         <div className="champ">
                           <label>Nom</label>
@@ -441,6 +543,98 @@ export default function AdminBenevoles({ benevole }) {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="bloc">
+        <h2>Connexion Google (responsables)</h2>
+        <p style={{ color: 'var(--texte-clair)' }}>
+          Les adresses Gmail ajoutées ici peuvent se connecter directement
+          avec leur compte Google, sans code PIN, via le bouton dédié sur
+          l'écran de connexion — réservé aux responsables. Rien ne change
+          pour les autres bénévoles, qui continuent à utiliser leur code.
+          À la première connexion réussie d'une adresse, sa fiche bénévole
+          est créée automatiquement avec le nom indiqué ci-dessous.
+        </p>
+
+        <form className="formulaire-inline" onSubmit={ajouterEmailAutorise}>
+          <div className="champ">
+            <label>Adresse Gmail</label>
+            <input
+              type="email"
+              value={nouvelEmail}
+              onChange={(e) => setNouvelEmail(e.target.value)}
+              placeholder="prenom.nom@gmail.com"
+            />
+          </div>
+          <div className="champ">
+            <label>Nom affiché</label>
+            <input
+              type="text"
+              value={nouveauNomEmail}
+              onChange={(e) => setNouveauNomEmail(e.target.value)}
+              placeholder="Prénom Nom"
+            />
+          </div>
+          <button className="bouton-principal" type="submit" disabled={ajoutEmailEnCours}>
+            {ajoutEmailEnCours ? 'Ajout…' : 'Autoriser cette adresse'}
+          </button>
+        </form>
+        {erreurAjoutEmail && <p className="erreur">{erreurAjoutEmail}</p>}
+
+        {chargementEmails ? (
+          <p style={{ color: 'var(--texte-clair)' }}>Chargement…</p>
+        ) : erreurEmails ? (
+          <p className="erreur">{erreurEmails}</p>
+        ) : emailsAutorises.length === 0 ? (
+          <p style={{ color: 'var(--texte-clair)' }}>
+            Aucune adresse Gmail autorisée pour l'instant.
+          </p>
+        ) : (
+          <table className="tableau-admin">
+            <thead>
+              <tr>
+                <th>Adresse Gmail</th>
+                <th>Nom</th>
+                <th>Statut</th>
+                <th>Compte créé</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {emailsAutorises.map((ligne) => (
+                <tr key={ligne.email}>
+                  <td>{ligne.email}</td>
+                  <td>{ligne.nom}</td>
+                  <td>
+                    <span className={`pastille ${ligne.actif ? 'actif' : 'inactif'}`}>
+                      {ligne.actif ? 'autorisée' : 'désactivée'}
+                    </span>
+                  </td>
+                  <td>{ligne.deja_connecte ? 'oui' : 'pas encore'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="bouton-secondaire"
+                        disabled={!!actionEmailEnCours[ligne.email]}
+                        onClick={() => basculerActifEmail(ligne)}
+                      >
+                        {ligne.actif ? 'Désactiver' : 'Réactiver'}
+                      </button>
+                      <button
+                        className="bouton-icone"
+                        title="Retirer de la liste"
+                        disabled={!!actionEmailEnCours[ligne.email]}
+                        onClick={() => supprimerEmailAutorise(ligne)}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </>
   )
