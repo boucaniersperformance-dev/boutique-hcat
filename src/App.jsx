@@ -49,6 +49,13 @@ export default function App() {
   }
 
   function deconnecter() {
+    // Invalide la liaison de session côté serveur (best-effort : même si
+    // l'appel échoue — réseau coupé, etc. — on déconnecte quand même
+    // localement ; la session serveur expirera de toute façon au bout de
+    // 12 heures).
+    if (benevole) {
+      supabase.rpc('deconnecter_benevole', { p_benevole_id: benevole.id }).catch(() => {})
+    }
     setBenevole(null)
     sessionStorage.removeItem(CLE_SESSION)
   }
