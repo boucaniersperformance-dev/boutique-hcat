@@ -166,6 +166,21 @@ export default function AdminBenevoles({ benevole }) {
     }))
   }
 
+  async function debloquer(cible) {
+    setActionEnCours(true)
+    setErreurEdition(null)
+    const { error } = await supabase.rpc('debloquer_benevole', {
+      p_benevole_id: benevole.id,
+      p_cible_id: cible.id,
+    })
+    setActionEnCours(false)
+    if (error) {
+      setErreurEdition(error.message || 'Erreur lors du déblocage.')
+      return
+    }
+    charger()
+  }
+
   async function changerStatut(cible) {
     setActionEnCours(true)
     const { error } = await supabase.rpc('changer_statut_benevole', {
@@ -250,6 +265,7 @@ export default function AdminBenevoles({ benevole }) {
               <th>Nom</th>
               <th>Rôle</th>
               <th>Statut</th>
+              <th>Verrouillage</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -293,6 +309,30 @@ export default function AdminBenevoles({ benevole }) {
                     </span>
                   </td>
                   <td>
+                    {b.verrouille ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="pastille inactif">bloqué</span>
+                        <button
+                          type="button"
+                          className="bouton-secondaire"
+                          style={{ padding: '2px 8px', fontSize: '0.85rem' }}
+                          disabled={actionEnCours}
+                          onClick={() => debloquer(b)}
+                        >
+                          Débloquer
+                        </button>
+                      </div>
+                    ) : b.tentatives_echouees > 0 ? (
+                      <span className="code-affiche">
+                        {b.tentatives_echouees} code{b.tentatives_echouees > 1 ? 's' : ''}{' '}
+                        incorrect{b.tentatives_echouees > 1 ? 's' : ''} récent
+                        {b.tentatives_echouees > 1 ? 's' : ''}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>
                     <button
                       className="bouton-icone"
                       title="Modifier"
@@ -312,7 +352,7 @@ export default function AdminBenevoles({ benevole }) {
                 </tr>
                 {ligneOuverte === b.id && (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={5}>
                       <div className="panneau-edition">
                         <div className="champ">
                           <label>Nom</label>
