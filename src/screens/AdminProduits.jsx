@@ -40,6 +40,8 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
   const [ligneOuverte, setLigneOuverte] = useState(null)
   const [nomEdite, setNomEdite] = useState('')
   const [referenceEdite, setReferenceEdite] = useState('')
+  const [delaiCommandeEdite, setDelaiCommandeEdite] = useState('')
+  const [delaiLivraisonEdite, setDelaiLivraisonEdite] = useState('')
   const [erreurEditionProduit, setErreurEditionProduit] = useState(null)
   const [actionEditionEnCours, setActionEditionEnCours] = useState(false)
 
@@ -224,6 +226,35 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
       })
     )
     afficherMessage(produitId, 'Stock mis à jour ✓')
+  }
+
+  // Seuil de réapprovisionnement d'une taille : vide = pas d'alerte pour
+  // cette taille (comportement par défaut). En-dessous (ou égal) à ce
+  // seuil, la taille apparaît sur la page "Réapprovisionnement".
+  async function sauvegarderSeuilReappro(variante, produitId, nouvelleValeur) {
+    const texte = (nouvelleValeur ?? '').toString().trim()
+    const valeur = texte === '' ? null : Math.max(0, parseInt(texte, 10) || 0)
+    const { error } = await supabase.rpc('definir_seuil_reappro', {
+      p_benevole_id: benevole.id,
+      p_variante_id: variante.id,
+      p_seuil: valeur,
+    })
+    if (error) {
+      afficherMessage(produitId, 'Erreur seuil')
+      return
+    }
+    setProduits((liste) =>
+      liste.map((p) => {
+        if (p.id !== produitId) return p
+        return {
+          ...p,
+          variantes_produit: p.variantes_produit.map((v) =>
+            v.id === variante.id ? { ...v, seuil_reappro: valeur } : v
+          ),
+        }
+      })
+    )
+    afficherMessage(produitId, 'Seuil enregistré ✓')
   }
 
   // Âges du menu déroulant ("5 ans"..."12 ans") pas encore utilisés par ce
@@ -497,6 +528,12 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
     setLigneOuverte(produit.id)
     setNomEdite(produit.nom)
     setReferenceEdite(produit.reference || '')
+    setDelaiCommandeEdite(
+      produit.delai_commande_jours != null ? String(produit.delai_commande_jours) : ''
+    )
+    setDelaiLivraisonEdite(
+      produit.delai_livraison_jours != null ? String(produit.delai_livraison_jours) : ''
+    )
     setErreurEditionProduit(null)
   }
 
@@ -544,6 +581,34 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
       liste.map((p) => (p.id === produit.id ? { ...p, reference: reference || null } : p))
     )
     afficherMessage(produit.id, 'Référence enregistrée ✓')
+  }
+
+  async function enregistrerDelais(produit) {
+    const texteCommande = delaiCommandeEdite.trim()
+    const texteLivraison = delaiLivraisonEdite.trim()
+    const delaiCommande = texteCommande === '' ? null : Math.max(0, parseInt(texteCommande, 10) || 0)
+    const delaiLivraison = texteLivraison === '' ? null : Math.max(0, parseInt(texteLivraison, 10) || 0)
+    setActionEditionEnCours(true)
+    setErreurEditionProduit(null)
+    const { error } = await supabase.rpc('definir_delais_produit', {
+      p_benevole_id: benevole.id,
+      p_produit_id: produit.id,
+      p_delai_commande_jours: delaiCommande,
+      p_delai_livraison_jours: delaiLivraison,
+    })
+    setActionEditionEnCours(false)
+    if (error) {
+      setErreurEditionProduit(error.message || "Erreur lors de l'enregistrement des délais.")
+      return
+    }
+    setProduits((liste) =>
+      liste.map((p) =>
+        p.id === produit.id
+          ? { ...p, delai_commande_jours: delaiCommande, delai_livraison_jours: delaiLivraison }
+          : p
+      )
+    )
+    afficherMessage(produit.id, 'Délais enregistrés ✓')
   }
 
   async function mettreALaCorbeille(produit) {
@@ -976,7 +1041,9 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
               <th title="Coché = visible dans l'écran de vente. Décoché = masqué, même si du stock reste disponible.">
                 En vente
               </th>
-              <th>Stock</th>
+              <th title="Deux champs par taille : le stock actuel, puis le seuil de réapprovisionnement (vide = pas d'alerte).">
+                Stock / Seuil réappro
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -1133,6 +1200,21 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                             }
                           }}
                         />
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="seuil"
+                          title="Seuil de réapprovisionnement de cette taille : en dessous (ou à ce niveau), elle apparaît sur la page Réapprovisionnement. Laisser vide = pas d'alerte."
+                          style={{ width: 64 }}
+                          defaultValue={variante.seuil_reappro ?? ''}
+                          onBlur={(e) => {
+                            const texte = e.target.value.trim()
+                            const valeur = texte === '' ? null : parseInt(texte, 10)
+                            if (valeur !== (variante.seuil_reappro ?? null)) {
+                              sauvegarderSeuilReappro(variante, produit.id, e.target.value)
+                            }
+                          }}
+                        />
                       </div>
                     ))}
                   {produit.necessite_taille && (
@@ -1244,6 +1326,49 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                             onClick={() => enregistrerReference(produit)}
                           >
                             Enregistrer la référence
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="champ">
+                        <label>
+                          Délais de réapprovisionnement (en jours), affichés
+                          sur la page Réapprovisionnement quand une taille
+                          manque de stock
+                        </label>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                          <div>
+                            <label style={{ fontSize: '0.78rem' }}>Délai de commande</label>
+                            <input
+                              type="number"
+                              min="0"
+                              style={{ width: 90 }}
+                              value={delaiCommandeEdite}
+                              onChange={(e) => setDelaiCommandeEdite(e.target.value)}
+                              placeholder="jours"
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.78rem' }}>Délai de livraison</label>
+                            <input
+                              type="number"
+                              min="0"
+                              style={{ width: 90 }}
+                              value={delaiLivraisonEdite}
+                              onChange={(e) => setDelaiLivraisonEdite(e.target.value)}
+                              placeholder="jours"
+                            />
+                          </div>
+                          <button
+                            className="bouton-secondaire"
+                            disabled={
+                              actionEditionEnCours ||
+                              (delaiCommandeEdite.trim() === (produit.delai_commande_jours != null ? String(produit.delai_commande_jours) : '') &&
+                                delaiLivraisonEdite.trim() === (produit.delai_livraison_jours != null ? String(produit.delai_livraison_jours) : ''))
+                            }
+                            onClick={() => enregistrerDelais(produit)}
+                          >
+                            Enregistrer les délais
                           </button>
                         </div>
                       </div>
