@@ -62,8 +62,23 @@ export default function Login({ onConnecte }) {
     })
     setVerification(false)
     const resultat = Array.isArray(data) ? data[0] : data
-    if (error || !resultat || !resultat.ok) {
-      setErreurPin('Code incorrect, réessaie.')
+    if (error || !resultat) {
+      setErreurPin('Une erreur est survenue, réessaie.')
+      setPin('')
+      return
+    }
+    if (!resultat.ok) {
+      if (resultat.verrouille) {
+        setErreurPin(
+          `Compte bloqué après plusieurs codes incorrects. Réessaie dans ${resultat.minutes_restantes} min, ou demande à un responsable de te débloquer depuis l'écran Bénévoles.`
+        )
+      } else if (resultat.tentatives_restantes != null && resultat.tentatives_restantes <= 2) {
+        setErreurPin(
+          `Code incorrect. Encore ${resultat.tentatives_restantes} tentative${resultat.tentatives_restantes > 1 ? 's' : ''} avant blocage.`
+        )
+      } else {
+        setErreurPin('Code incorrect, réessaie.')
+      }
       setPin('')
       return
     }
