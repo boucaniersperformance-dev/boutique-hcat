@@ -37,6 +37,11 @@ export default function App() {
   const [verificationGoogle, setVerificationGoogle] = useState(false)
   const [erreurGoogle, setErreurGoogle] = useState(null)
 
+  // Pendant la fermeture d'une éventuelle session Google (voir
+  // deconnecter), pour que le bouton "Changer de bénévole" donne un
+  // retour visuel immédiat plutôt que de sembler ne rien faire.
+  const [deconnexionEnCours, setDeconnexionEnCours] = useState(false)
+
   useEffect(() => {
     ensureSupabaseSession()
       .then(() => setPret(true))
@@ -102,6 +107,8 @@ export default function App() {
   }
 
   async function deconnecter() {
+    setDeconnexionEnCours(true)
+
     // Invalide la liaison de session côté serveur (best-effort : même si
     // l'appel échoue — réseau coupé, etc. — on déconnecte quand même
     // localement ; la session serveur expirera de toute façon au bout de
@@ -109,18 +116,22 @@ export default function App() {
     if (benevole) {
       supabase.rpc('deconnecter_benevole', { p_benevole_id: benevole.id }).catch(() => {})
     }
-    setBenevole(null)
-    sessionStorage.removeItem(CLE_SESSION)
 
     // Si ce bénévole s'était connecté avec un vrai compte Google, il faut
-    // aussi fermer cette session-là (pas seulement la liaison côté appli)
-    // — sinon le prochain bénévole qui touche "Changer de bénévole" sur
-    // cette même tablette serait reconnecté automatiquement à sa place.
+    // fermer cette session Google AVANT de revenir à l'écran de connexion
+    // (pas après) — sinon, pendant ce court instant où l'écran affiche
+    // "aucun bénévole" mais où la session Google est encore active,
+    // l'appli le reconnecte automatiquement tout de suite, et le bouton
+    // semble ne rien faire.
     const { data } = await supabase.auth.getSession()
     if (estUneSessionGoogle(data.session)) {
       await supabase.auth.signOut().catch(() => {})
       await supabase.auth.signInAnonymously().catch(() => {})
     }
+
+    setBenevole(null)
+    sessionStorage.removeItem(CLE_SESSION)
+    setDeconnexionEnCours(false)
   }
 
   // Charge le réglage du jeu du palet une fois connecté (une tablette qui
@@ -276,7 +287,9 @@ export default function App() {
           <span>
             {benevole.nom} {estResponsable ? '(responsable)' : ''}
           </span>
-          <button onClick={deconnecter}>Changer de bénévole</button>
+          <button onClick={deconnecter} disabled={deconnexionEnCours}>
+            {deconnexionEnCours ? 'Déconnexion…' : 'Changer de bénévole'}
+          </button>
         </div>
       </header>
 
