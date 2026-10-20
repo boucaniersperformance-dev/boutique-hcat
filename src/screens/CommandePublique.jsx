@@ -129,17 +129,20 @@ export default function CommandePublique() {
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false)
   const [erreurEnvoi, setErreurEnvoi] = useState(null)
   const [messageSucces, setMessageSucces] = useState(null)
+  const [numerosObtenus, setNumerosObtenus] = useState([])
 
   async function enregistrerCommande() {
     if (!peutValider) return
     setEnregistrementEnCours(true)
     setErreurEnvoi(null)
     setMessageSucces(null)
+    setNumerosObtenus([])
 
     const echecs = []
+    const numeros = []
     let dernierMessageErreur = null
     for (const ligne of lignes) {
-      const { error } = await supabase.rpc('enregistrer_commande_publique', {
+      const { data, error } = await supabase.rpc('enregistrer_commande_publique', {
         p_produit_id: ligne.produit_id,
         p_taille: ligne.taille,
         p_quantite: ligne.quantite,
@@ -151,6 +154,9 @@ export default function CommandePublique() {
       if (error) {
         echecs.push(ligne)
         dernierMessageErreur = error.message
+      } else {
+        const ligneResultat = Array.isArray(data) ? data[0] : data
+        if (ligneResultat?.numero_commande) numeros.push(ligneResultat.numero_commande)
       }
     }
 
@@ -161,8 +167,11 @@ export default function CommandePublique() {
       setNomClient('')
       setPrenomClient('')
       setTelephoneClient('')
+      setNumerosObtenus(numeros)
       setMessageSucces(
-        'Commande enregistrée ✓ — un(e) responsable du club te recontactera.'
+        numeros.length > 1
+          ? 'Commande enregistrée ✓ — un(e) responsable du club te recontactera. Garde ces numéros, ils te serviront si tu dois faire une demande d\'annulation :'
+          : 'Commande enregistrée ✓ — un(e) responsable du club te recontactera. Garde ce numéro, il te servira si tu dois faire une demande d\'annulation :'
       )
     } else if (echecs.length === lignes.length) {
       setErreurEnvoi(
@@ -170,10 +179,51 @@ export default function CommandePublique() {
       )
     } else {
       setLignes(echecs)
+      setNumerosObtenus(numeros)
       setErreurEnvoi(
         `${lignes.length - echecs.length} article(s) enregistré(s), ${echecs.length} en échec — ${dernierMessageErreur || 'réessaie pour l\'article restant.'}`
       )
     }
+  }
+
+  // --- Annulation d'une commande déjà déposée : le client ne peut pas
+  // l'annuler lui-même, mais peut transmettre une demande (numéro de
+  // commande + son téléphone, pour vérifier qu'il en est bien l'auteur +
+  // un motif) qu'un responsable acceptera ou refusera depuis l'appli.
+  const [annulationOuverte, setAnnulationOuverte] = useState(false)
+  const [numeroAnnulation, setNumeroAnnulation] = useState('')
+  const [telephoneAnnulation, setTelephoneAnnulation] = useState('')
+  const [motifAnnulation, setMotifAnnulation] = useState('')
+  const [envoiAnnulationEnCours, setEnvoiAnnulationEnCours] = useState(false)
+  const [erreurAnnulation, setErreurAnnulation] = useState(null)
+  const [messageSuccesAnnulation, setMessageSuccesAnnulation] = useState(null)
+
+  const demandeAnnulationValide =
+    numeroAnnulation.trim() !== '' &&
+    telephoneValide(telephoneAnnulation) &&
+    motifAnnulation.trim() !== ''
+
+  async function envoyerDemandeAnnulation() {
+    if (!demandeAnnulationValide) return
+    setEnvoiAnnulationEnCours(true)
+    setErreurAnnulation(null)
+    setMessageSuccesAnnulation(null)
+    const { error } = await supabase.rpc('demander_annulation_commande', {
+      p_numero_commande: numeroAnnulation.trim(),
+      p_telephone: telephoneAnnulation.trim(),
+      p_motif: motifAnnulation.trim(),
+    })
+    setEnvoiAnnulationEnCours(false)
+    if (error) {
+      setErreurAnnulation(error.message || "L'envoi a échoué. Réessaie.")
+      return
+    }
+    setNumeroAnnulation('')
+    setTelephoneAnnulation('')
+    setMotifAnnulation('')
+    setMessageSuccesAnnulation(
+      'Demande transmise ✓ — un(e) responsable du club va l\'examiner.'
+    )
   }
 
   if (erreurSession) {
@@ -339,7 +389,18 @@ export default function CommandePublique() {
 
           {erreurEnvoi && <p className="erreur">{erreurEnvoi}</p>}
           {messageSucces && (
-            <p style={{ color: 'var(--vert)', fontWeight: 700 }}>{messageSucces}</p>
+            <div style={{ marginTop: 8 }}>
+              <p style={{ color: 'var(--vert)', fontWeight: 700 }}>{messageSucces}</p>
+              {numerosObtenus.length > 0 && (
+                <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+                  {numerosObtenus.map((n) => (
+                    <li key={n} style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                      {n}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           <button
@@ -366,6 +427,72 @@ export default function CommandePublique() {
             onFermer={() => setProduitOuvert(null)}
           />
         )}
+
+        <div className="bloc" style={{ marginTop: 24 }}>
+          <button
+            type="button"
+            className="bouton-secondaire"
+            onClick={() => setAnnulationOuverte((v) => !v)}
+          >
+            {annulationOuverte ? '▾ Annuler une commande' : '▸ Annuler une commande'}
+          </button>
+
+          {annulationOuverte && (
+            <div style={{ marginTop: 16, maxWidth: 480 }}>
+              <p style={{ color: 'var(--texte-clair)' }}>
+                Tu ne peux pas annuler toi-même une commande déjà déposée — renseigne les
+                informations ci-dessous, ta demande sera transmise à un(e) responsable du club,
+                qui l'acceptera ou la refusera.
+              </p>
+              <div className="champ">
+                <label>Numéro de commande *</label>
+                <input
+                  type="text"
+                  value={numeroAnnulation}
+                  onChange={(e) => setNumeroAnnulation(e.target.value)}
+                  placeholder="CW_20261020_001"
+                />
+              </div>
+              <div className="champ">
+                <label>Ton numéro de téléphone *</label>
+                <input
+                  type="tel"
+                  value={telephoneAnnulation}
+                  onChange={(e) => setTelephoneAnnulation(e.target.value)}
+                  placeholder="06 12 34 56 78"
+                />
+              </div>
+              <div className="champ">
+                <label>Motif *</label>
+                <input
+                  type="text"
+                  value={motifAnnulation}
+                  onChange={(e) => setMotifAnnulation(e.target.value)}
+                  placeholder="Je ne souhaite plus cet article…"
+                />
+              </div>
+              {erreurAnnulation && <p className="erreur">{erreurAnnulation}</p>}
+              {messageSuccesAnnulation && (
+                <p style={{ color: 'var(--vert)', fontWeight: 700 }}>{messageSuccesAnnulation}</p>
+              )}
+              <button
+                className="bouton-principal"
+                style={{ marginTop: 10 }}
+                disabled={!demandeAnnulationValide || envoiAnnulationEnCours}
+                onClick={envoyerDemandeAnnulation}
+              >
+                {envoiAnnulationEnCours ? 'Envoi…' : 'Transmettre la demande'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <p style={{ fontSize: '0.78rem', color: 'var(--texte-clair)', marginTop: 24, maxWidth: 680 }}>
+          Les informations transmises ci-dessus (nom, prénom, téléphone) sont utilisées
+          uniquement par les Boucaniers HCAT pour traiter ta demande, puis conservées 6 mois
+          maximum après traitement avant suppression automatique. Pour consulter, corriger ou
+          faire supprimer ces informations avant ce délai, contacte un responsable du club.
+        </p>
       </main>
 
       <footer className="pied-page">
