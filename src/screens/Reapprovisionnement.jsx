@@ -148,14 +148,14 @@ export default function Reapprovisionnement({ benevole }) {
         {erreur && <p className="erreur">{erreur}</p>}
 
         <p style={{ color: 'var(--texte-clair)' }}>
-          Liste des tailles dont le stock est au niveau (ou en dessous) du
-          seuil d'alerte de leur article. Configure le seuil et le délai de
-          livraison depuis l'onglet <strong>Produits</strong>,
-          en ouvrant la fiche de l'article puis le panneau «&nbsp;✏️
-          Modifier&nbsp;» — un seul seuil réglé pour tout l'article
-          s'applique automatiquement à chacune de ses tailles (ex. : seuil
-          5 = alerte dès qu'une taille quelconque tombe à 5 ou moins). Un
-          article sans seuil réglé n'apparaît jamais ici. Coche les tailles
+          Liste des tailles dont le stock est au niveau (ou en dessous) de
+          leur propre seuil d'alerte. Le seuil se règle taille par taille
+          (certaines tailles partent plus vite que d'autres — ex. : M à 5,
+          XXL à 2), dans le champ «&nbsp;seuil&nbsp;» à côté du stock de
+          chaque taille sur l'onglet <strong>Produits</strong>. Le délai de
+          livraison, lui, se règle une seule fois pour tout l'article,
+          depuis le panneau «&nbsp;✏️ Modifier&nbsp;» de sa fiche. Une
+          taille sans seuil réglé n'apparaît jamais ici. Coche les tailles
           à commander vraiment, ajuste la quantité si besoin, puis valide —
           elles disparaîtront de cette liste jusqu'à réception.
         </p>
