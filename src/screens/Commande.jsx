@@ -240,6 +240,56 @@ export default function Commande({ benevole }) {
     () => demandesAnnulation.filter((d) => d.statut === 'en_attente'),
     [demandesAnnulation]
   )
+  const demandesTraitees = useMemo(
+    () => demandesAnnulation.filter((d) => d.statut === 'traitee'),
+    [demandesAnnulation]
+  )
+
+  // --- Purge des demandes déjà traitées (acceptées ou refusées) : une
+  // fois la commande annulée, la demande n'affiche plus ni client ni
+  // article (la commande a été supprimée) — ce bouton permet de nettoyer
+  // la liste, protégé par le code PIN d'un responsable.
+  const [purgeOuverte, setPurgeOuverte] = useState(false)
+  const [pinPurge, setPinPurge] = useState('')
+  const [erreurPurge, setErreurPurge] = useState(null)
+  const [purgeEnCours, setPurgeEnCours] = useState(false)
+
+  useFermetureRetour(purgeOuverte, () => {
+    if (!purgeEnCours) setPurgeOuverte(false)
+  })
+
+  function ouvrirPurge() {
+    setPurgeOuverte(true)
+    setPinPurge('')
+    setErreurPurge(null)
+  }
+
+  function fermerPurge() {
+    if (purgeEnCours) return
+    setPurgeOuverte(false)
+  }
+
+  async function confirmerPurge() {
+    if (!/^\d{4}$/.test(pinPurge)) {
+      setErreurPurge('Le code doit contenir exactement 4 chiffres.')
+      return
+    }
+    setPurgeEnCours(true)
+    setErreurPurge(null)
+    const { error } = await supabase.rpc('purger_demandes_annulation_traitees', {
+      p_benevole_id: benevole.id,
+      p_pin: pinPurge,
+    })
+    setPurgeEnCours(false)
+    if (error) {
+      setErreurPurge(
+        error.message === 'Code PIN incorrect' ? 'Code PIN incorrect.' : error.message || 'Échec.'
+      )
+      return
+    }
+    setPurgeOuverte(false)
+    chargerDemandesAnnulation()
+  }
 
   const chargerDemandesAnnulation = useCallback(async () => {
     if (!estResponsable) {
@@ -511,25 +561,37 @@ export default function Commande({ benevole }) {
 
       {estResponsable && (
         <div className="bloc" style={{ marginTop: 32 }}>
-          <h2>
-            Demandes d'annulation (clients)
-            {demandesEnAttente.length > 0 && (
-              <span
-                style={{
-                  marginLeft: 10,
-                  background: 'var(--orange)',
-                  color: 'white',
-                  borderRadius: 999,
-                  padding: '2px 10px',
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  verticalAlign: 'middle',
-                }}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>
+              Demandes d'annulation (clients)
+              {demandesEnAttente.length > 0 && (
+                <span
+                  style={{
+                    marginLeft: 10,
+                    background: 'var(--orange)',
+                    color: 'white',
+                    borderRadius: 999,
+                    padding: '2px 10px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  {demandesEnAttente.length}
+                </span>
+              )}
+            </h2>
+            {demandesTraitees.length > 0 && (
+              <button
+                type="button"
+                className="bouton-icone"
+                title="Purger les demandes déjà traitées"
+                onClick={ouvrirPurge}
               >
-                {demandesEnAttente.length}
-              </span>
+                🗑️
+              </button>
             )}
-          </h2>
+          </div>
           {chargementDemandes && <p className="chargement">Chargement…</p>}
           {erreurDemandes && <p className="erreur">{erreurDemandes}</p>}
           {!chargementDemandes && !erreurDemandes && (
@@ -1027,6 +1089,47 @@ export default function Commande({ benevole }) {
                 }
               >
                 {suppressionEnCours ? 'Annulation…' : 'Annuler la commande'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {purgeOuverte && (
+        <div className="fond-modale" onClick={fermerPurge}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>Purger les demandes déjà traitées ?</h2>
+            <p>
+              {demandesTraitees.length} demande{demandesTraitees.length > 1 ? 's' : ''} déjà
+              acceptée(s) ou refusée(s) seront définitivement supprimées de cette liste. Les
+              demandes encore en attente ne sont pas concernées.
+            </p>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              Cette action est irréversible. Confirme avec ton code PIN de responsable.
+            </p>
+            <div className="champ">
+              <label>Code PIN responsable</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                autoFocus
+                value={pinPurge}
+                onChange={(e) => setPinPurge(e.target.value.replace(/\D/g, ''))}
+                placeholder="1234"
+              />
+            </div>
+            {erreurPurge && <p className="erreur">{erreurPurge}</p>}
+            <div className="modale-actions">
+              <button className="bouton-secondaire" onClick={fermerPurge} disabled={purgeEnCours}>
+                Retour
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={confirmerPurge}
+                disabled={purgeEnCours || !/^\d{4}$/.test(pinPurge)}
+              >
+                {purgeEnCours ? 'Purge…' : 'Purger définitivement'}
               </button>
             </div>
           </div>
