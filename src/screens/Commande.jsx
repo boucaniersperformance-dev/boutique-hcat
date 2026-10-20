@@ -7,6 +7,7 @@ import {
   photosProduit,
 } from '../constants.js'
 import CommandeAjoutModal from '../components/CommandeAjoutModal.jsx'
+import PaiementModal from '../components/PaiementModal.jsx'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 function telephoneValide(t) {
@@ -21,15 +22,28 @@ function cleLigne(produitId, taille) {
   return `${produitId}__${taille || ''}`
 }
 
+// Résumé textuel des lignes d'une commande ("T-shirt (M) ×2, Casquette ×1"),
+// utilisé partout où on affiche une commande sans ouvrir son détail complet.
+function resumeLignes(lignes) {
+  if (!lignes || lignes.length === 0) return '—'
+  return lignes
+    .map((l) => `${l.nom_produit}${l.taille ? ` (${l.taille})` : ''} ×${l.quantite}`)
+    .join(', ')
+}
+
 // Écran « Commande » : n'importe quel bénévole peut y noter la demande
-// d'un client pour un article pas disponible tout de suite (taille
-// épuisée, article pas sorti à ce match…) — nom/prénom/téléphone du
-// client, puis un ou plusieurs articles avec leur quantité. Purement
-// informatif : aucun lien avec le stock, c'est même tout l'intérêt de
-// cette page.
+// d'un client pour un ou plusieurs articles pas disponibles tout de suite
+// (taille épuisée, article pas sorti à ce match…) — nom/prénom/téléphone du
+// client, puis les articles avec leur quantité, regroupés en une seule
+// commande avec un seul numéro. Purement informatif : aucun lien avec le
+// stock, c'est même tout l'intérêt de cette page.
 //
 // Les responsables voient en plus, sur ce même écran, le suivi de toutes
-// les commandes enregistrées (à traiter / traitées).
+// les commandes enregistrées : préparation article par article (chaque
+// ligne a sa case « prêt », cochée au fur et à mesure — la commande entière
+// passe en « traitée » dès que tout est prêt) et encaissement (indépendant
+// de la préparation : une commande peut être payée avant ou après d'être
+// prête).
 export default function Commande({ benevole }) {
   const estResponsable = benevole.role === 'responsable'
 
@@ -152,7 +166,48 @@ export default function Commande({ benevole }) {
   const [commandes, setCommandes] = useState([])
   const [chargementCommandes, setChargementCommandes] = useState(true)
   const [erreurCommandes, setErreurCommandes] = useState(null)
-  const [actionEnCours, setActionEnCours] = useState({})
+
+  // Filtres indépendants : préparation (en_attente / traitee) et paiement
+  // (a_regler / payee) — une commande peut avancer sur l'un sans l'autre.
+  const [filtrePreparation, setFiltrePreparation] = useState('tout')
+  const [filtrePaiement, setFiltrePaiement] = useState('tout')
+
+  const commandesFiltrees = useMemo(
+    () =>
+      commandes.filter(
+        (c) =>
+          (filtrePreparation === 'tout' || c.statut === filtrePreparation) &&
+          (filtrePaiement === 'tout' || c.statut_paiement === filtrePaiement)
+      ),
+    [commandes, filtrePreparation, filtrePaiement]
+  )
+
+  // --- Détail d'une commande (clic sur son numéro) : lignes avec case
+  // « prêt » à cocher une par une, et encaissement (bouton « Payer »).
+  const [commandeDetail, setCommandeDetail] = useState(null)
+  const [actionLigneEnCours, setActionLigneEnCours] = useState({})
+  const [paiementCommandeOuvert, setPaiementCommandeOuvert] = useState(false)
+  const [paiementEnCours, setPaiementEnCours] = useState(false)
+  const [erreurPaiement, setErreurPaiement] = useState(null)
+
+  useFermetureRetour(!!commandeDetail, () => {
+    if (!paiementEnCours) {
+      setCommandeDetail(null)
+      setPaiementCommandeOuvert(false)
+    }
+  })
+
+  function ouvrirDetail(commande) {
+    setCommandeDetail(commande)
+    setPaiementCommandeOuvert(false)
+    setErreurPaiement(null)
+  }
+
+  function fermerDetail() {
+    if (paiementEnCours) return
+    setCommandeDetail(null)
+    setPaiementCommandeOuvert(false)
+  }
 
   // --- Annulation d'une commande : raison obligatoire + confirmation par
   // le code PIN du responsable, même principe que la suppression d'une
@@ -243,10 +298,13 @@ export default function Commande({ benevole }) {
     chargerCommandes()
   }
 
+  // Renvoie la liste à jour (et met aussi à jour l'état `commandes`), pour
+  // que les appelants puissent resynchroniser la modale de détail ouverte
+  // sans avoir à relire deux fois la base.
   const chargerCommandes = useCallback(async () => {
     if (!estResponsable) {
       setChargementCommandes(false)
-      return
+      return null
     }
     setErreurCommandes(null)
     const { data, error } = await supabase.rpc('lister_commandes', {
@@ -254,15 +312,28 @@ export default function Commande({ benevole }) {
     })
     if (error) {
       setErreurCommandes('Impossible de charger les commandes enregistrées.')
-    } else {
-      setCommandes(data || [])
+      setChargementCommandes(false)
+      return null
     }
+    setCommandes(data || [])
     setChargementCommandes(false)
+    return data || []
   }, [benevole.id, estResponsable])
 
   useEffect(() => {
     chargerCommandes()
   }, [chargerCommandes])
+
+  // Recharge la liste des commandes puis, si la modale de détail est
+  // ouverte, la resynchronise avec la version à jour de cette même
+  // commande (nouvelles lignes prêtes, nouveau statut de paiement…).
+  async function rafraichirEtResynchroniser(commandeId) {
+    const liste = await chargerCommandes()
+    if (commandeId && liste) {
+      const maj = liste.find((c) => c.id === commandeId)
+      if (maj) setCommandeDetail(maj)
+    }
+  }
 
   async function enregistrerCommande() {
     if (!peutValider) return
@@ -270,51 +341,47 @@ export default function Commande({ benevole }) {
     setErreurEnvoi(null)
     setMessageSucces(null)
 
-    const echecs = []
-    for (const ligne of lignes) {
-      const { error } = await supabase.rpc('enregistrer_commande', {
-        p_benevole_id: benevole.id,
-        p_produit_id: ligne.produit_id,
-        p_taille: ligne.taille,
-        p_quantite: ligne.quantite,
-        p_nom_client: nomClient.trim(),
-        p_prenom_client: prenomClient.trim(),
-        p_telephone_client: telephoneClient.trim(),
-        p_email_client: emailClient.trim() || null,
-      })
-      if (error) echecs.push(ligne)
-    }
+    const { error } = await supabase.rpc('enregistrer_commande', {
+      p_benevole_id: benevole.id,
+      p_lignes: lignes.map((l) => ({
+        produit_id: l.produit_id,
+        taille: l.taille,
+        quantite: l.quantite,
+      })),
+      p_nom_client: nomClient.trim(),
+      p_prenom_client: prenomClient.trim(),
+      p_telephone_client: telephoneClient.trim(),
+      p_email_client: emailClient.trim() || null,
+    })
 
     setEnregistrementEnCours(false)
 
-    if (echecs.length === 0) {
-      setLignes([])
-      setNomClient('')
-      setPrenomClient('')
-      setTelephoneClient('')
-      setEmailClient('')
-      setMessageSucces('Commande enregistrée ✓')
-      chargerCommandes()
-    } else if (echecs.length === lignes.length) {
-      setErreurEnvoi("L'enregistrement a échoué. Réessaie.")
-    } else {
-      setLignes(echecs)
-      setErreurEnvoi(
-        `${lignes.length - echecs.length} article(s) enregistré(s), ${echecs.length} en échec — réessaie pour l'article restant.`
-      )
-      chargerCommandes()
+    if (error) {
+      setErreurEnvoi(error.message || "L'enregistrement a échoué. Réessaie.")
+      return
     }
+
+    setLignes([])
+    setNomClient('')
+    setPrenomClient('')
+    setTelephoneClient('')
+    setEmailClient('')
+    setMessageSucces('Commande enregistrée ✓')
+    chargerCommandes()
   }
 
-  async function basculerStatut(commande) {
-    setActionEnCours((e) => ({ ...e, [commande.id]: true }))
-    const { error } = await supabase.rpc('marquer_commande', {
+  // Coche/décoche une ligne comme prête ; la commande entière passe
+  // automatiquement en « traitée » dès que toutes ses lignes le sont
+  // (logique côté base, voir marquer_ligne_prete).
+  async function toggleLignePrete(ligne) {
+    setActionLigneEnCours((e) => ({ ...e, [ligne.id]: true }))
+    const { error } = await supabase.rpc('marquer_ligne_prete', {
       p_benevole_id: benevole.id,
-      p_commande_id: commande.id,
-      p_traitee: commande.statut !== 'traitee',
+      p_ligne_id: ligne.id,
+      p_pret: !ligne.pret,
     })
-    setActionEnCours((e) => ({ ...e, [commande.id]: false }))
-    if (!error) chargerCommandes()
+    setActionLigneEnCours((e) => ({ ...e, [ligne.id]: false }))
+    if (!error) await rafraichirEtResynchroniser(commandeDetail?.id)
   }
 
   function ouvrirSuppression(commande) {
@@ -356,7 +423,33 @@ export default function Commande({ benevole }) {
       return
     }
     setCommandeASupprimer(null)
+    if (commandeDetail && commandeDetail.id === commandeASupprimer.id) {
+      setCommandeDetail(null)
+      setPaiementCommandeOuvert(false)
+    }
     chargerCommandes()
+  }
+
+  // Encaissement d'une commande (clic sur son numéro, puis « Payer ») :
+  // même choix CB / espèces et calcul de monnaie que l'encaissement d'une
+  // vente au comptoir.
+  async function validerPaiementCommande(mode, montantRecu) {
+    if (!commandeDetail) return
+    setPaiementEnCours(true)
+    setErreurPaiement(null)
+    const { error } = await supabase.rpc('marquer_commande_payee', {
+      p_benevole_id: benevole.id,
+      p_commande_id: commandeDetail.id,
+      p_mode_paiement: mode,
+      p_montant_recu: montantRecu,
+    })
+    setPaiementEnCours(false)
+    if (error) {
+      setErreurPaiement(error.message || "L'encaissement a échoué. Réessaie.")
+      return
+    }
+    setPaiementCommandeOuvert(false)
+    await rafraichirEtResynchroniser(commandeDetail.id)
   }
 
   return (
@@ -364,7 +457,7 @@ export default function Commande({ benevole }) {
       <div className="bloc">
         <h2>Commande</h2>
         <p style={{ color: 'var(--texte-clair)' }}>
-          Pour un article qui n'est pas disponible tout de suite (taille
+          Pour un ou plusieurs articles pas disponibles tout de suite (taille
           épuisée, article pas sorti à ce match…) : note la demande du
           client ci-dessous, elle sera recontactée par un(e) responsable.
         </p>
@@ -446,7 +539,7 @@ export default function Commande({ benevole }) {
                   <tr>
                     <th>Numéro</th>
                     <th>Client</th>
-                    <th>Article</th>
+                    <th>Articles</th>
                     <th>Motif</th>
                     <th>Date</th>
                     <th>Statut</th>
@@ -464,11 +557,7 @@ export default function Commande({ benevole }) {
                           ? `${d.prenom_client || ''} ${d.nom_client || ''}`.trim()
                           : '—'}
                       </td>
-                      <td>
-                        {d.nom_produit || '—'}
-                        {d.taille ? ` · ${d.taille}` : ''}
-                        {d.quantite ? ` · Qté ${d.quantite}` : ''}
-                      </td>
+                      <td>{d.articles || '—'}</td>
                       <td>{d.motif}</td>
                       <td>{new Date(d.cree_le).toLocaleString('fr-FR')}</td>
                       <td>
@@ -519,6 +608,42 @@ export default function Commande({ benevole }) {
       {estResponsable && (
         <div className="bloc" style={{ marginTop: 32 }}>
           <h2>Suivi des commandes</h2>
+
+          <div className="filtres-segments">
+            <span className="etiquette">Préparation :</span>
+            {[
+              { cle: 'tout', label: 'Toutes' },
+              { cle: 'en_attente', label: 'En attente' },
+              { cle: 'traitee', label: 'Prêtes' },
+            ].map((opt) => (
+              <button
+                key={opt.cle}
+                type="button"
+                className={filtrePreparation === opt.cle ? 'selectionne' : ''}
+                onClick={() => setFiltrePreparation(opt.cle)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="filtres-segments">
+            <span className="etiquette">Paiement :</span>
+            {[
+              { cle: 'tout', label: 'Tous' },
+              { cle: 'a_regler', label: 'À régler' },
+              { cle: 'payee', label: 'Payées' },
+            ].map((opt) => (
+              <button
+                key={opt.cle}
+                type="button"
+                className={filtrePaiement === opt.cle ? 'selectionne' : ''}
+                onClick={() => setFiltrePaiement(opt.cle)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           {chargementCommandes && <p className="chargement">Chargement…</p>}
           {erreurCommandes && <p className="erreur">{erreurCommandes}</p>}
           {!chargementCommandes && !erreurCommandes && (
@@ -529,20 +654,26 @@ export default function Commande({ benevole }) {
                     <th>Numéro</th>
                     <th>Client</th>
                     <th>Téléphone</th>
-                    <th>Article</th>
-                    <th>Quantité</th>
+                    <th>Articles</th>
                     <th>Enregistrée par</th>
                     <th>Origine</th>
                     <th>Date</th>
-                    <th>Statut</th>
+                    <th>Préparation</th>
+                    <th>Paiement</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {commandes.map((c) => (
+                  {commandesFiltrees.map((c) => (
                     <tr key={c.id}>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                        {c.numero_commande || '—'}
+                      <td>
+                        <button
+                          type="button"
+                          className="lien-commande"
+                          onClick={() => ouvrirDetail(c)}
+                        >
+                          {c.numero_commande || '—'}
+                        </button>
                       </td>
                       <td>
                         {c.prenom_client} {c.nom_client}
@@ -553,11 +684,7 @@ export default function Commande({ benevole }) {
                         )}
                       </td>
                       <td>{c.telephone_client}</td>
-                      <td>
-                        {c.nom_produit}
-                        {c.taille ? ` · ${c.taille}` : ''}
-                      </td>
-                      <td>{c.quantite}</td>
+                      <td style={{ maxWidth: 260 }}>{resumeLignes(c.lignes)}</td>
                       <td>{c.benevole_nom || '—'}</td>
                       <td>
                         {c.origine === 'public' ? (
@@ -569,23 +696,22 @@ export default function Commande({ benevole }) {
                       <td>{new Date(c.created_at).toLocaleString('fr-FR')}</td>
                       <td>
                         {c.statut === 'traitee' ? (
-                          <span style={{ color: 'var(--vert)', fontWeight: 700 }}>✓ Traitée</span>
+                          <span style={{ color: 'var(--vert)', fontWeight: 700 }}>✓ Prête</span>
                         ) : (
                           <span style={{ color: 'var(--orange)', fontWeight: 700 }}>En attente</span>
                         )}
                       </td>
-                      <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button
-                          className="bouton-secondaire"
-                          disabled={!!actionEnCours[c.id]}
-                          onClick={() => basculerStatut(c)}
-                        >
-                          {c.statut === 'traitee' ? 'Remettre en attente' : 'Marquer traitée'}
-                        </button>
+                      <td>
+                        {c.statut_paiement === 'payee' ? (
+                          <span style={{ color: 'var(--vert)', fontWeight: 700 }}>✓ Payée</span>
+                        ) : (
+                          <span style={{ color: 'var(--orange)', fontWeight: 700 }}>À régler</span>
+                        )}
+                      </td>
+                      <td>
                         <button
                           className="bouton-icone"
                           title="Annuler cette commande"
-                          disabled={!!actionEnCours[c.id]}
                           onClick={() => ouvrirSuppression(c)}
                         >
                           ×
@@ -593,10 +719,10 @@ export default function Commande({ benevole }) {
                       </td>
                     </tr>
                   ))}
-                  {commandes.length === 0 && (
+                  {commandesFiltrees.length === 0 && (
                     <tr>
                       <td colSpan={10} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
-                        Aucune commande enregistrée pour l'instant
+                        Aucune commande ne correspond à ce filtre
                       </td>
                     </tr>
                   )}
@@ -748,15 +874,114 @@ export default function Commande({ benevole }) {
         </button>
       )}
 
+      {commandeDetail && (
+        <div className="fond-modale" onClick={fermerDetail}>
+          <div className="modale" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <h2>Commande {commandeDetail.numero_commande}</h2>
+            <p>
+              {commandeDetail.prenom_client} {commandeDetail.nom_client} · {commandeDetail.telephone_client}
+              {commandeDetail.email_client ? ` · ${commandeDetail.email_client}` : ''}
+            </p>
+            <p style={{ color: 'var(--texte-clair)', fontSize: '0.85rem' }}>
+              {commandeDetail.origine === 'public' ? 'En ligne (QR)' : 'En boutique'}
+              {commandeDetail.benevole_nom ? ` · Enregistrée par ${commandeDetail.benevole_nom}` : ''}
+              {' · '}
+              {new Date(commandeDetail.created_at).toLocaleString('fr-FR')}
+            </p>
+
+            <h3 style={{ marginTop: 16, marginBottom: 4 }}>Articles</h3>
+            <p style={{ color: 'var(--texte-clair)', fontSize: '0.8rem', marginTop: 0 }}>
+              Coche chaque article au fur et à mesure qu'il est prêt.
+            </p>
+            <div className="lignes-pretes">
+              {(commandeDetail.lignes || []).map((l) => (
+                <label
+                  className={`ligne-prete${actionLigneEnCours[l.id] ? ' chargement' : ''}`}
+                  key={l.id}
+                >
+                  <input
+                    type="checkbox"
+                    checked={l.pret}
+                    disabled={!!actionLigneEnCours[l.id]}
+                    onChange={() => toggleLignePrete(l)}
+                  />
+                  <span className="panier-ligne-info">
+                    <span className="panier-ligne-nom">{l.nom_produit}</span>
+                    <span className="panier-ligne-detail">
+                      {l.taille ? `${l.taille} · ` : ''}Quantité : {l.quantite} ·{' '}
+                      {formatEuros(l.prix_unitaire * l.quantite)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+              {(commandeDetail.lignes || []).length === 0 && (
+                <p className="panier-vide">Aucun article</p>
+              )}
+            </div>
+            <p style={{ textAlign: 'right', fontWeight: 700, margin: '4px 0 0' }}>
+              Total indicatif : {formatEuros(commandeDetail.total)}
+            </p>
+
+            <div className="detail-commande-statuts">
+              <span>
+                {commandeDetail.statut === 'traitee' ? (
+                  <span style={{ color: 'var(--vert)', fontWeight: 700 }}>✓ Commande prête</span>
+                ) : (
+                  <span style={{ color: 'var(--orange)', fontWeight: 700 }}>Préparation en attente</span>
+                )}
+              </span>
+              <span>
+                {commandeDetail.statut_paiement === 'payee' ? (
+                  <span style={{ color: 'var(--vert)', fontWeight: 700 }}>
+                    ✓ Payée ({commandeDetail.mode_paiement === 'cb' ? 'CB' : 'Espèces'})
+                    {commandeDetail.mode_paiement === 'especes' && commandeDetail.monnaie_rendue != null
+                      ? ` · Monnaie rendue ${formatEuros(commandeDetail.monnaie_rendue)}`
+                      : ''}
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--orange)', fontWeight: 700 }}>À régler</span>
+                )}
+              </span>
+            </div>
+
+            {erreurPaiement && <p className="erreur">{erreurPaiement}</p>}
+
+            <div className="modale-actions">
+              <button className="bouton-secondaire" onClick={fermerDetail}>
+                Fermer
+              </button>
+              {commandeDetail.statut_paiement !== 'payee' && (
+                <button
+                  className="bouton-principal"
+                  onClick={() => {
+                    setErreurPaiement(null)
+                    setPaiementCommandeOuvert(true)
+                  }}
+                >
+                  💳 Payer
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paiementCommandeOuvert && commandeDetail && (
+        <PaiementModal
+          total={commandeDetail.total}
+          enCours={paiementEnCours}
+          onFermer={() => setPaiementCommandeOuvert(false)}
+          onValider={validerPaiementCommande}
+        />
+      )}
+
       {commandeASupprimer && (
         <div className="fond-modale" onClick={fermerSuppression}>
           <div className="modale" onClick={(e) => e.stopPropagation()}>
             <h2>Annuler cette commande ?</h2>
             <p>
               {commandeASupprimer.prenom_client} {commandeASupprimer.nom_client} —{' '}
-              {commandeASupprimer.nom_produit}
-              {commandeASupprimer.taille ? ` · ${commandeASupprimer.taille}` : ''} · Quantité :{' '}
-              {commandeASupprimer.quantite}
+              {resumeLignes(commandeASupprimer.lignes)}
             </p>
             <p style={{ color: 'var(--texte-clair)' }}>
               Cette action est irréversible. Indique la raison, puis confirme avec ton code PIN de
@@ -819,7 +1044,7 @@ export default function Commande({ benevole }) {
             <p>
               {demandeAExaminer.demande.numero_commande} —{' '}
               {demandeAExaminer.demande.prenom_client} {demandeAExaminer.demande.nom_client} —{' '}
-              {demandeAExaminer.demande.nom_produit}
+              {demandeAExaminer.demande.articles}
             </p>
             <p style={{ color: 'var(--texte-clair)' }}>
               Motif indiqué par le client : « {demandeAExaminer.demande.motif} »
