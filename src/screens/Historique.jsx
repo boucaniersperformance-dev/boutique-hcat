@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient'
 import { formatEuros, resumeMatch, comparerTailles } from '../constants.js'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 import { construireClasseurVentesXlsx } from '../lib/exportVentesExcel.js'
+import { genererFacturePdf } from '../lib/genererFacture.js'
+import FactureModal from '../components/FactureModal.jsx'
 
 function aujourdHui() {
   return new Date().toISOString().slice(0, 10)
@@ -51,6 +53,12 @@ export default function Historique({ benevole }) {
   const [erreurSuppression, setErreurSuppression] = useState(null)
   const [suppressionEnCours, setSuppressionEnCours] = useState(false)
 
+  // --- Facture de vente a posteriori : la vente pour laquelle la modale
+  // (nom/adresse acheteur) est ouverte, null sinon.
+  const [factureVente, setFactureVente] = useState(null)
+  const [factureEnCours, setFactureEnCours] = useState(false)
+  const [erreurFacture, setErreurFacture] = useState(null)
+
   const [matchs, setMatchs] = useState([])
   const [chargementMatchs, setChargementMatchs] = useState(true)
   const [erreurMatchs, setErreurMatchs] = useState(null)
@@ -86,6 +94,7 @@ export default function Historique({ benevole }) {
   // confirmation au lieu de faire quitter l'application.
   useFermetureRetour(!!venteASupprimer, fermerSuppression)
   useFermetureRetour(!!matchASupprimer, fermerSuppressionMatch)
+  useFermetureRetour(!!factureVente, fermerFacture)
 
   const chargerMatchs = useCallback(async () => {
     setChargementMatchs(true)
@@ -326,6 +335,53 @@ export default function Historique({ benevole }) {
     chargerTotauxArticles()
   }
 
+  function ouvrirFacture(vente) {
+    setFactureVente(vente)
+    setErreurFacture(null)
+  }
+
+  function fermerFacture() {
+    if (factureEnCours) return
+    setFactureVente(null)
+  }
+
+  // Génère (ou corrige) la facture d'une vente déjà encaissée : la base
+  // attribue/retrouve le numéro et renvoie tout ce qu'il faut pour
+  // construire le PDF (en-tête + lignes), téléchargé immédiatement.
+  async function genererFacturePourVente(nomAcheteur, adresseAcheteur) {
+    setFactureEnCours(true)
+    setErreurFacture(null)
+    const { data, error } = await supabase.rpc('generer_facture', {
+      p_benevole_id: benevole.id,
+      p_vente_id: factureVente.vente_id,
+      p_nom_acheteur: nomAcheteur,
+      p_adresse_acheteur: adresseAcheteur,
+    })
+    setFactureEnCours(false)
+    if (error) {
+      setErreurFacture(error.message || "La génération de la facture a échoué.")
+      return
+    }
+    const facture = Array.isArray(data) ? data[0] : data
+    try {
+      const pdfBytes = await genererFacturePdf(facture)
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${facture.numero_facture}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setErreurFacture(
+        "La facture a bien été enregistrée, mais le PDF n'a pas pu être généré. Réessaie depuis cette même vente."
+      )
+      return
+    }
+    setFactureVente(null)
+    charger()
+  }
+
   function ouvrirSuppressionMatch(match) {
     setMatchASupprimer(match)
     setPinConfirmationMatch('')
@@ -467,7 +523,18 @@ export default function Historique({ benevole }) {
                               <td>{v.mode_paiement === 'cb' ? 'CB' : 'Espèces'}</td>
                               <td style={{ whiteSpace: 'pre-line' }}>{v.detail}</td>
                               <td>{formatEuros(v.total)}</td>
-                              <td>
+                              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                <button
+                                  className="bouton-secondaire"
+                                  title={
+                                    v.numero_facture
+                                      ? `Facture déjà émise : ${v.numero_facture}`
+                                      : 'Générer une facture pour cette vente'
+                                  }
+                                  onClick={() => ouvrirFacture(v)}
+                                >
+                                  🧾 {v.numero_facture || 'Facture'}
+                                </button>
                                 <button
                                   className="bouton-icone"
                                   title="Supprimer cette vente"
@@ -639,6 +706,16 @@ export default function Historique({ benevole }) {
             </div>
           </div>
         </div>
+      )}
+
+      {factureVente && (
+        <FactureModal
+          vente={factureVente}
+          enCours={factureEnCours}
+          erreur={erreurFacture}
+          onFermer={fermerFacture}
+          onValider={genererFacturePourVente}
+        />
       )}
     </div>
   )
