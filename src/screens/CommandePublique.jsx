@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ensureSupabaseSession, supabase } from '../supabaseClient'
 import {
   CATEGORIES,
@@ -19,6 +19,15 @@ function emailValide(e) {
 function cleLigne(produitId, taille) {
   return `${produitId}__${taille || ''}`
 }
+
+// Motifs proposés dans le menu déroulant de la demande d'annulation. Avec
+// « Autre », un champ texte libre apparaît pour préciser.
+const MOTIFS_ANNULATION = [
+  { valeur: 'deja_achete', libelle: 'Déjà acheté ailleurs' },
+  { valeur: 'ne_veut_plus', libelle: 'Ne le veux plus' },
+  { valeur: 'erreur_commande', libelle: 'Erreur de commande' },
+  { valeur: 'autre', libelle: 'Autre' },
+]
 
 // Page publique « Commander un article » : accessible via un QR code,
 // sans connexion ni code PIN. Un client scanne le code, parcourt le
@@ -139,6 +148,17 @@ export default function CommandePublique() {
   const [messageSucces, setMessageSucces] = useState(null)
   const [numerosObtenus, setNumerosObtenus] = useState([])
 
+  // --- Panier flottant : raccourci pour rejoindre directement le bouton
+  // de validation, tout en bas de la page (après le long catalogue).
+  const refBoutonEnregistrer = useRef(null)
+  const totalArticlesPanier = useMemo(
+    () => lignes.reduce((total, l) => total + l.quantite, 0),
+    [lignes]
+  )
+  function allerAuRecapitulatif() {
+    refBoutonEnregistrer.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   async function enregistrerCommande() {
     if (!peutValider) return
     setEnregistrementEnCours(true)
@@ -197,21 +217,50 @@ export default function CommandePublique() {
   }
 
   // --- Annulation d'une commande déjà déposée : le client ne peut pas
-  // l'annuler lui-même, mais peut transmettre une demande (numéro de
-  // commande + son téléphone, pour vérifier qu'il en est bien l'auteur +
+  // l'annuler lui-même, mais peut transmettre une demande (sa commande +
   // un motif) qu'un responsable acceptera ou refusera depuis l'appli.
+  // Identification par téléphone : plus besoin de recopier le numéro de
+  // commande, le client tape son téléphone et choisit dans la liste de
+  // ses commandes récentes.
   const [annulationOuverte, setAnnulationOuverte] = useState(false)
-  const [numeroAnnulation, setNumeroAnnulation] = useState('')
   const [telephoneAnnulation, setTelephoneAnnulation] = useState('')
+  const [rechercheEnCours, setRechercheEnCours] = useState(false)
+  const [erreurRecherche, setErreurRecherche] = useState(null)
+  const [commandesTrouvees, setCommandesTrouvees] = useState(null) // null = pas encore cherché
+  const [commandeSelectionnee, setCommandeSelectionnee] = useState(null) // numero_commande
   const [motifAnnulation, setMotifAnnulation] = useState('')
+  const [motifAutrePrecision, setMotifAutrePrecision] = useState('')
   const [envoiAnnulationEnCours, setEnvoiAnnulationEnCours] = useState(false)
   const [erreurAnnulation, setErreurAnnulation] = useState(null)
   const [messageSuccesAnnulation, setMessageSuccesAnnulation] = useState(null)
 
+  async function rechercherCommandes() {
+    if (!telephoneValide(telephoneAnnulation)) return
+    setRechercheEnCours(true)
+    setErreurRecherche(null)
+    setCommandesTrouvees(null)
+    setCommandeSelectionnee(null)
+    const { data, error } = await supabase.rpc('lister_commandes_par_telephone', {
+      p_telephone: telephoneAnnulation.trim(),
+    })
+    setRechercheEnCours(false)
+    if (error) {
+      setErreurRecherche(error.message || 'La recherche a échoué. Réessaie.')
+      return
+    }
+    setCommandesTrouvees(data || [])
+  }
+
+  const motifFinal =
+    motifAnnulation === 'autre'
+      ? motifAutrePrecision.trim()
+      : MOTIFS_ANNULATION.find((m) => m.valeur === motifAnnulation)?.libelle || ''
+
   const demandeAnnulationValide =
-    numeroAnnulation.trim() !== '' &&
+    !!commandeSelectionnee &&
     telephoneValide(telephoneAnnulation) &&
-    motifAnnulation.trim() !== ''
+    motifAnnulation !== '' &&
+    motifFinal !== ''
 
   async function envoyerDemandeAnnulation() {
     if (!demandeAnnulationValide) return
@@ -219,18 +268,20 @@ export default function CommandePublique() {
     setErreurAnnulation(null)
     setMessageSuccesAnnulation(null)
     const { error } = await supabase.rpc('demander_annulation_commande', {
-      p_numero_commande: numeroAnnulation.trim(),
+      p_numero_commande: commandeSelectionnee,
       p_telephone: telephoneAnnulation.trim(),
-      p_motif: motifAnnulation.trim(),
+      p_motif: motifFinal,
     })
     setEnvoiAnnulationEnCours(false)
     if (error) {
       setErreurAnnulation(error.message || "L'envoi a échoué. Réessaie.")
       return
     }
-    setNumeroAnnulation('')
     setTelephoneAnnulation('')
+    setCommandesTrouvees(null)
+    setCommandeSelectionnee(null)
     setMotifAnnulation('')
+    setMotifAutrePrecision('')
     setMessageSuccesAnnulation(
       'Demande transmise ✓ — un(e) responsable du club va l\'examiner.'
     )
@@ -432,6 +483,7 @@ export default function CommandePublique() {
           )}
 
           <button
+            ref={refBoutonEnregistrer}
             className="bouton-principal"
             style={{ marginTop: 16 }}
             disabled={!peutValider || enregistrementEnCours}
@@ -456,6 +508,18 @@ export default function CommandePublique() {
           />
         )}
 
+        {lignes.length > 0 && (
+          <button
+            type="button"
+            className="bouton-panier-flottant"
+            onClick={allerAuRecapitulatif}
+            aria-label="Aller valider ma commande"
+            title="Aller valider ma commande"
+          >
+            🛒<span className="panier-flottant-compte">{totalArticlesPanier}</span>
+          </button>
+        )}
+
         <div className="bloc" style={{ marginTop: 24 }}>
           <button
             type="button"
@@ -468,49 +532,117 @@ export default function CommandePublique() {
           {annulationOuverte && (
             <div style={{ marginTop: 16, maxWidth: 480 }}>
               <p style={{ color: 'var(--texte-clair)' }}>
-                Tu ne peux pas annuler toi-même une commande déjà déposée — renseigne les
-                informations ci-dessous, ta demande sera transmise à un(e) responsable du club,
-                qui l'acceptera ou la refusera.
+                Tu ne peux pas annuler toi-même une commande déjà déposée. Indique ton numéro de
+                téléphone, choisis la commande concernée dans la liste, précise le motif, et ta
+                demande sera transmise à un(e) responsable du club, qui l'acceptera ou la
+                refusera.
               </p>
-              <div className="champ">
-                <label>Numéro de commande *</label>
-                <input
-                  type="text"
-                  value={numeroAnnulation}
-                  onChange={(e) => setNumeroAnnulation(e.target.value)}
-                  placeholder="CW_20261020_001"
-                />
-              </div>
               <div className="champ">
                 <label>Ton numéro de téléphone *</label>
                 <input
                   type="tel"
                   value={telephoneAnnulation}
-                  onChange={(e) => setTelephoneAnnulation(e.target.value)}
+                  onChange={(e) => {
+                    setTelephoneAnnulation(e.target.value)
+                    setCommandesTrouvees(null)
+                    setCommandeSelectionnee(null)
+                    setErreurRecherche(null)
+                    setMessageSuccesAnnulation(null)
+                  }}
                   placeholder="06 12 34 56 78"
                 />
               </div>
-              <div className="champ">
-                <label>Motif *</label>
-                <input
-                  type="text"
-                  value={motifAnnulation}
-                  onChange={(e) => setMotifAnnulation(e.target.value)}
-                  placeholder="Je ne souhaite plus cet article…"
-                />
-              </div>
+              <button
+                type="button"
+                className="bouton-secondaire"
+                disabled={!telephoneValide(telephoneAnnulation) || rechercheEnCours}
+                onClick={rechercherCommandes}
+              >
+                {rechercheEnCours ? 'Recherche…' : '🔍 Rechercher mes commandes'}
+              </button>
+
+              {erreurRecherche && <p className="erreur">{erreurRecherche}</p>}
+
+              {commandesTrouvees !== null && commandesTrouvees.length === 0 && (
+                <p style={{ color: 'var(--texte-clair)', marginTop: 10 }}>
+                  Aucune commande trouvée avec ce numéro de téléphone. Vérifie le numéro, ou
+                  contacte directement un(e) responsable du club.
+                </p>
+              )}
+
+              {commandesTrouvees !== null && commandesTrouvees.length > 0 && (
+                <div className="commande-recherche-liste">
+                  {commandesTrouvees.map((c) => (
+                    <button
+                      type="button"
+                      key={c.numero_commande}
+                      className={
+                        'commande-recherche-item' +
+                        (commandeSelectionnee === c.numero_commande ? ' selectionnee' : '')
+                      }
+                      disabled={c.deja_demandee}
+                      onClick={() => setCommandeSelectionnee(c.numero_commande)}
+                    >
+                      <span>
+                        <strong>{c.nom_produit}</strong>
+                        {c.taille ? ` · ${c.taille}` : ''} · Qté {c.quantite}
+                        <br />
+                        <span style={{ fontSize: '0.78rem', color: 'var(--texte-clair)' }}>
+                          {c.numero_commande} · {new Date(c.created_at).toLocaleDateString('fr-FR')}
+                          {c.deja_demandee ? ' · Demande déjà envoyée' : ''}
+                        </span>
+                      </span>
+                      {commandeSelectionnee === c.numero_commande && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {commandeSelectionnee && (
+                <>
+                  <div className="champ">
+                    <label>Motif *</label>
+                    <select
+                      value={motifAnnulation}
+                      onChange={(e) => setMotifAnnulation(e.target.value)}
+                    >
+                      <option value="">— Choisir —</option>
+                      {MOTIFS_ANNULATION.map((m) => (
+                        <option key={m.valeur} value={m.valeur}>
+                          {m.libelle}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {motifAnnulation === 'autre' && (
+                    <div className="champ">
+                      <label>Précise le motif *</label>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={motifAutrePrecision}
+                        onChange={(e) => setMotifAutrePrecision(e.target.value)}
+                        placeholder="Ton motif…"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
               {erreurAnnulation && <p className="erreur">{erreurAnnulation}</p>}
               {messageSuccesAnnulation && (
                 <p style={{ color: 'var(--vert)', fontWeight: 700 }}>{messageSuccesAnnulation}</p>
               )}
-              <button
-                className="bouton-principal"
-                style={{ marginTop: 10 }}
-                disabled={!demandeAnnulationValide || envoiAnnulationEnCours}
-                onClick={envoyerDemandeAnnulation}
-              >
-                {envoiAnnulationEnCours ? 'Envoi…' : 'Transmettre la demande'}
-              </button>
+              {commandeSelectionnee && (
+                <button
+                  className="bouton-principal"
+                  style={{ marginTop: 10 }}
+                  disabled={!demandeAnnulationValide || envoiAnnulationEnCours}
+                  onClick={envoyerDemandeAnnulation}
+                >
+                  {envoiAnnulationEnCours ? 'Envoi…' : 'Transmettre la demande'}
+                </button>
+              )}
             </div>
           )}
         </div>
