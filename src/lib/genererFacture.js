@@ -34,6 +34,27 @@ export async function genererFacturePdf(facture) {
   let page = pdfDoc.addPage([LARGEUR, HAUTEUR])
   let y = HAUTEUR - MARGE
 
+  // Logo du club, en haut à droite de la première page. Chargé depuis le
+  // fichier déjà utilisé par l'application (public/logo.png) ; une facture
+  // reste valide sans logo si le fichier n'a pas pu être récupéré (pas de
+  // connexion, par exemple).
+  const TAILLE_LOGO = 60
+  try {
+    const reponseLogo = await fetch('/logo.png')
+    if (reponseLogo.ok) {
+      const octetsLogo = await reponseLogo.arrayBuffer()
+      const logoImage = await pdfDoc.embedPng(octetsLogo)
+      page.drawImage(logoImage, {
+        x: LARGEUR - MARGE - TAILLE_LOGO,
+        y: HAUTEUR - MARGE - TAILLE_LOGO + 6,
+        width: TAILLE_LOGO,
+        height: TAILLE_LOGO,
+      })
+    }
+  } catch {
+    // Non bloquant — voir commentaire ci-dessus.
+  }
+
   function nouvellePage() {
     page = pdfDoc.addPage([LARGEUR, HAUTEUR])
     y = HAUTEUR - MARGE
