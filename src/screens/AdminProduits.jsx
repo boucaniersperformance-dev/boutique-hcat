@@ -41,7 +41,6 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
   const [nomEdite, setNomEdite] = useState('')
   const [referenceEdite, setReferenceEdite] = useState('')
   const [delaiLivraisonEdite, setDelaiLivraisonEdite] = useState('')
-  const [seuilReapproEdite, setSeuilReapproEdite] = useState('')
   const [erreurEditionProduit, setErreurEditionProduit] = useState(null)
   const [actionEditionEnCours, setActionEditionEnCours] = useState(false)
 
@@ -228,9 +227,36 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
     afficherMessage(produitId, 'Stock mis à jour ✓')
   }
 
-  // Seuil de réapprovisionnement de l'article : réglé une seule fois pour
-  // tout l'article (voir enregistrerSeuilReappro ci-dessous) et appliqué
-  // automatiquement à chacune de ses tailles — vide = pas d'alerte.
+  // Seuil de réapprovisionnement : réglé taille par taille (certaines
+  // tailles partent plus vite que d'autres), directement depuis le
+  // champ à côté du stock de chaque taille — vide = pas d'alerte pour
+  // cette taille. Le délai de livraison, lui, reste réglé une seule
+  // fois pour tout l'article (voir enregistrerDelais ci-dessus).
+  async function sauvegarderSeuilReappro(variante, produitId, nouvelleValeur) {
+    const texte = String(nouvelleValeur).trim()
+    const seuil = texte === '' ? null : Math.max(0, parseInt(texte, 10) || 0)
+    const { error } = await supabase.rpc('definir_seuil_reappro', {
+      p_benevole_id: benevole.id,
+      p_variante_id: variante.id,
+      p_seuil: seuil,
+    })
+    if (error) {
+      afficherMessage(produitId, 'Erreur seuil')
+      return
+    }
+    setProduits((liste) =>
+      liste.map((p) => {
+        if (p.id !== produitId) return p
+        return {
+          ...p,
+          variantes_produit: p.variantes_produit.map((v) =>
+            v.id === variante.id ? { ...v, seuil_reappro: seuil } : v
+          ),
+        }
+      })
+    )
+    afficherMessage(produitId, 'Seuil mis à jour ✓')
+  }
 
   // Âges du menu déroulant ("5 ans"..."12 ans") pas encore utilisés par ce
   // produit, pour éviter de proposer un doublon (rejeté de toute façon côté
@@ -506,9 +532,6 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
     setDelaiLivraisonEdite(
       produit.delai_livraison_jours != null ? String(produit.delai_livraison_jours) : ''
     )
-    setSeuilReapproEdite(
-      produit.seuil_reappro != null ? String(produit.seuil_reappro) : ''
-    )
     setErreurEditionProduit(null)
   }
 
@@ -579,32 +602,6 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
       )
     )
     afficherMessage(produit.id, 'Délai enregistré ✓')
-  }
-
-  // Seuil de réapprovisionnement, réglé une fois pour tout l'article : en
-  // dessous (ou à ce niveau), CHAQUE taille de cet article apparaît sur la
-  // page Réapprovisionnement (vide = pas d'alerte, quelle que soit la
-  // taille). Pour un article sans taille (goodie), s'applique à son seul
-  // stock.
-  async function enregistrerSeuilReappro(produit) {
-    const texte = seuilReapproEdite.trim()
-    const seuil = texte === '' ? null : Math.max(0, parseInt(texte, 10) || 0)
-    setActionEditionEnCours(true)
-    setErreurEditionProduit(null)
-    const { error } = await supabase.rpc('definir_seuil_reappro_produit', {
-      p_benevole_id: benevole.id,
-      p_produit_id: produit.id,
-      p_seuil: seuil,
-    })
-    setActionEditionEnCours(false)
-    if (error) {
-      setErreurEditionProduit(error.message || "Erreur lors de l'enregistrement du seuil.")
-      return
-    }
-    setProduits((liste) =>
-      liste.map((p) => (p.id === produit.id ? { ...p, seuil_reappro: seuil } : p))
-    )
-    afficherMessage(produit.id, 'Seuil enregistré ✓')
   }
 
   async function mettreALaCorbeille(produit) {
@@ -1037,8 +1034,8 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
               <th title="Coché = visible dans l'écran de vente. Décoché = masqué, même si du stock reste disponible.">
                 En vente
               </th>
-              <th title="Stock actuel de chaque taille. Le seuil de réapprovisionnement se règle une fois pour tout l'article, dans le panneau « ✏️ Modifier ».">
-                Stock
+              <th title="Stock actuel de chaque taille, et à côté son seuil de réapprovisionnement (vide = pas d'alerte pour cette taille). Le délai de livraison, lui, se règle une fois pour tout l'article, dans le panneau « ✏️ Modifier ».">
+                Stock / Seuil
               </th>
               <th>Actions</th>
             </tr>
@@ -1190,9 +1187,27 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                           type="number"
                           min="0"
                           defaultValue={variante.stock_qty}
+                          title="Stock actuel"
+                          style={{ width: 56 }}
                           onBlur={(e) => {
                             if (parseInt(e.target.value, 10) !== variante.stock_qty) {
                               sauvegarderStock(variante, produit.id, e.target.value)
+                            }
+                          }}
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          defaultValue={variante.seuil_reappro ?? ''}
+                          placeholder="seuil"
+                          title="Seuil de réapprovisionnement pour cette taille — vide = pas d'alerte"
+                          style={{ width: 64 }}
+                          onBlur={(e) => {
+                            const texte = e.target.value.trim()
+                            const valeurActuelle =
+                              variante.seuil_reappro != null ? String(variante.seuil_reappro) : ''
+                            if (texte !== valeurActuelle) {
+                              sauvegarderSeuilReappro(variante, produit.id, e.target.value)
                             }
                           }}
                         />
@@ -1342,38 +1357,12 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                         </div>
                       </div>
 
-                      <div className="champ">
-                        <label>
-                          Seuil de réapprovisionnement — un seul réglage pour
-                          tout l'article : en dessous (ou à ce niveau),{' '}
-                          {produit.necessite_taille
-                            ? 'CHAQUE taille de cet article'
-                            : 'cet article'}{' '}
-                          apparaît sur la page Réapprovisionnement. Laisser
-                          vide = pas d'alerte.
-                        </label>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            style={{ width: 90 }}
-                            value={seuilReapproEdite}
-                            onChange={(e) => setSeuilReapproEdite(e.target.value)}
-                            placeholder="seuil"
-                          />
-                          <button
-                            className="bouton-secondaire"
-                            disabled={
-                              actionEditionEnCours ||
-                              seuilReapproEdite.trim() ===
-                                (produit.seuil_reappro != null ? String(produit.seuil_reappro) : '')
-                            }
-                            onClick={() => enregistrerSeuilReappro(produit)}
-                          >
-                            Enregistrer le seuil
-                          </button>
-                        </div>
-                      </div>
+                      <p style={{ color: 'var(--texte-clair)', fontSize: '0.85rem' }}>
+                        Le seuil de réapprovisionnement se règle désormais
+                        taille par taille, dans le champ « seuil » à côté du
+                        stock de chaque taille (colonne «&nbsp;Stock /
+                        Seuil&nbsp;»).
+                      </p>
 
                       {erreurEditionProduit && <p className="erreur">{erreurEditionProduit}</p>}
 
