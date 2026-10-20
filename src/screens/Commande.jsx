@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import {
   CATEGORIES,
@@ -136,6 +136,17 @@ export default function Commande({ benevole }) {
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false)
   const [erreurEnvoi, setErreurEnvoi] = useState(null)
   const [messageSucces, setMessageSucces] = useState(null)
+
+  // --- Panier flottant : raccourci pour rejoindre directement le bouton
+  // de validation, tout en bas de la page (après le long catalogue).
+  const refBoutonEnregistrer = useRef(null)
+  const totalArticlesPanier = useMemo(
+    () => lignes.reduce((total, l) => total + l.quantite, 0),
+    [lignes]
+  )
+  function allerAuRecapitulatif() {
+    refBoutonEnregistrer.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   // --- Suivi des commandes (responsables uniquement) ---
   const [commandes, setCommandes] = useState([])
@@ -403,120 +414,7 @@ export default function Commande({ benevole }) {
         <p style={{ color: 'var(--texte-clair)', fontSize: '0.85rem', marginTop: -12, marginBottom: 16 }}>
           Si renseigné, le client reçoit automatiquement un récapitulatif de sa commande par email.
         </p>
-
-        <h3 style={{ marginBottom: 10 }}>Objet de la commande</h3>
-
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-          <input
-            type="text"
-            placeholder="Rechercher un article…"
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
-            style={{ maxWidth: 220 }}
-          />
-          {CATEGORIES.map((cat) => (
-            <label className="filtre-case" key={cat.cle} style={{ display: 'inline-flex' }}>
-              <input
-                type="checkbox"
-                checked={categoriesActives[cat.cle]}
-                onChange={() => basculerCategorie(cat.cle)}
-              />
-              {cat.label}
-            </label>
-          ))}
-        </div>
-
-        {chargementProduits && <p className="chargement">Chargement des produits…</p>}
-        {erreurProduits && <p className="erreur">{erreurProduits}</p>}
-
-        {!chargementProduits && !erreurProduits && (
-          <div className="grille-produits">
-            {produitsAffiches.length === 0 && (
-              <p className="panier-vide">Aucun article ne correspond</p>
-            )}
-            {produitsAffiches.map((produit) => {
-              const photos = photosProduit(produit)
-              return (
-                <button
-                  key={produit.id}
-                  type="button"
-                  className="produit-bouton"
-                  onClick={() => setProduitOuvert(produit)}
-                >
-                  <div className="produit-image">
-                    {categorieProduit(produit) === 'enfant' && (
-                      <span className="ruban-enfant">Enfant</span>
-                    )}
-                    {photos.length ? <img src={photos[0]} alt={produit.nom} /> : '🛍️'}
-                  </div>
-                  <div className="produit-nom">{produit.nom}</div>
-                  {!produit.actif && (
-                    <div style={{ fontSize: '0.7rem', color: 'var(--texte-clair)' }}>
-                      Pas actuellement en vente
-                    </div>
-                  )}
-                  <div className="produit-prix">{formatEuros(produit.prix)}</div>
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        <h3 style={{ marginTop: 24, marginBottom: 10 }}>Récapitulatif</h3>
-        {lignes.length === 0 ? (
-          <p className="panier-vide">Aucun article ajouté pour l'instant</p>
-        ) : (
-          <div className="panier-lignes" style={{ maxWidth: 520 }}>
-            {lignes.map((l) => (
-              <div className="panier-ligne" key={l.cle}>
-                <div className="panier-ligne-info">
-                  <span className="panier-ligne-nom">{l.nom_produit}</span>
-                  <span className="panier-ligne-detail">
-                    {l.taille ? `${l.taille} · ` : ''}Quantité : {l.quantite}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="bouton-icone"
-                  title="Retirer cet article"
-                  onClick={() => retirerLigne(l.cle)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {erreurEnvoi && <p className="erreur">{erreurEnvoi}</p>}
-        {messageSucces && (
-          <p style={{ color: 'var(--vert)', fontWeight: 700 }}>{messageSucces}</p>
-        )}
-
-        <button
-          className="bouton-principal"
-          style={{ marginTop: 16 }}
-          disabled={!peutValider || enregistrementEnCours}
-          onClick={enregistrerCommande}
-          title={
-            !ficheClientComplete
-              ? 'Renseigne le nom, le prénom et un numéro de téléphone valide'
-              : lignes.length === 0
-                ? 'Ajoute au moins un article'
-                : undefined
-          }
-        >
-          {enregistrementEnCours ? 'Enregistrement…' : 'Enregistrer la commande'}
-        </button>
       </div>
-
-      {produitOuvert && (
-        <CommandeAjoutModal
-          produit={produitOuvert}
-          onValider={ajouterLigne}
-          onFermer={() => setProduitOuvert(null)}
-        />
-      )}
 
       {estResponsable && (
         <div className="bloc" style={{ marginTop: 32 }}>
@@ -707,6 +605,135 @@ export default function Commande({ benevole }) {
             </div>
           )}
         </div>
+      )}
+
+      <div className="bloc" style={{ marginTop: 32 }}>
+        <h3 style={{ marginBottom: 10 }}>Objet de la commande</h3>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          <input
+            type="text"
+            placeholder="Rechercher un article…"
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            style={{ maxWidth: 220 }}
+          />
+          {CATEGORIES.map((cat) => (
+            <label className="filtre-case" key={cat.cle} style={{ display: 'inline-flex' }}>
+              <input
+                type="checkbox"
+                checked={categoriesActives[cat.cle]}
+                onChange={() => basculerCategorie(cat.cle)}
+              />
+              {cat.label}
+            </label>
+          ))}
+        </div>
+
+        {chargementProduits && <p className="chargement">Chargement des produits…</p>}
+        {erreurProduits && <p className="erreur">{erreurProduits}</p>}
+
+        {!chargementProduits && !erreurProduits && (
+          <div className="grille-produits">
+            {produitsAffiches.length === 0 && (
+              <p className="panier-vide">Aucun article ne correspond</p>
+            )}
+            {produitsAffiches.map((produit) => {
+              const photos = photosProduit(produit)
+              return (
+                <button
+                  key={produit.id}
+                  type="button"
+                  className="produit-bouton"
+                  onClick={() => setProduitOuvert(produit)}
+                >
+                  <div className="produit-image">
+                    {categorieProduit(produit) === 'enfant' && (
+                      <span className="ruban-enfant">Enfant</span>
+                    )}
+                    {photos.length ? <img src={photos[0]} alt={produit.nom} /> : '🛍️'}
+                  </div>
+                  <div className="produit-nom">{produit.nom}</div>
+                  {!produit.actif && (
+                    <div style={{ fontSize: '0.7rem', color: 'var(--texte-clair)' }}>
+                      Pas actuellement en vente
+                    </div>
+                  )}
+                  <div className="produit-prix">{formatEuros(produit.prix)}</div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <h3 style={{ marginTop: 24, marginBottom: 10 }}>Récapitulatif</h3>
+        {lignes.length === 0 ? (
+          <p className="panier-vide">Aucun article ajouté pour l'instant</p>
+        ) : (
+          <div className="panier-lignes" style={{ maxWidth: 520 }}>
+            {lignes.map((l) => (
+              <div className="panier-ligne" key={l.cle}>
+                <div className="panier-ligne-info">
+                  <span className="panier-ligne-nom">{l.nom_produit}</span>
+                  <span className="panier-ligne-detail">
+                    {l.taille ? `${l.taille} · ` : ''}Quantité : {l.quantite}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="bouton-icone"
+                  title="Retirer cet article"
+                  onClick={() => retirerLigne(l.cle)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {erreurEnvoi && <p className="erreur">{erreurEnvoi}</p>}
+        {messageSucces && (
+          <p style={{ color: 'var(--vert)', fontWeight: 700 }}>{messageSucces}</p>
+        )}
+
+        <button
+          ref={refBoutonEnregistrer}
+          className="bouton-principal"
+          style={{ marginTop: 16 }}
+          disabled={!peutValider || enregistrementEnCours}
+          onClick={enregistrerCommande}
+          title={
+            !ficheClientComplete
+              ? 'Renseigne le nom, le prénom et un numéro de téléphone valide'
+              : lignes.length === 0
+                ? 'Ajoute au moins un article'
+                : undefined
+          }
+        >
+          {enregistrementEnCours ? 'Enregistrement…' : 'Enregistrer la commande'}
+        </button>
+      </div>
+
+      {produitOuvert && (
+        <CommandeAjoutModal
+          produit={produitOuvert}
+          onValider={ajouterLigne}
+          onFermer={() => setProduitOuvert(null)}
+        />
+      )}
+
+      {lignes.length > 0 && (
+        <button
+          type="button"
+          className="bouton-panier-flottant"
+          style={{ bottom: 84 }}
+          onClick={allerAuRecapitulatif}
+          aria-label="Aller valider la commande"
+          title="Aller valider la commande"
+        >
+          🛒<span className="panier-flottant-compte">{totalArticlesPanier}</span>
+        </button>
       )}
 
       {afficherBoutonHaut && (
