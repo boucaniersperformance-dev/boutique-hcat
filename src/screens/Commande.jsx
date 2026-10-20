@@ -13,6 +13,10 @@ function telephoneValide(t) {
   return String(t || '').replace(/\D/g, '').length >= 10
 }
 
+function emailValide(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim())
+}
+
 function cleLigne(produitId, taille) {
   return `${produitId}__${taille || ''}`
 }
@@ -96,6 +100,7 @@ export default function Commande({ benevole }) {
   const [nomClient, setNomClient] = useState('')
   const [prenomClient, setPrenomClient] = useState('')
   const [telephoneClient, setTelephoneClient] = useState('')
+  const [emailClient, setEmailClient] = useState('')
   const [lignes, setLignes] = useState([])
 
   function ajouterLigne({ taille, quantite }) {
@@ -122,7 +127,10 @@ export default function Commande({ benevole }) {
   }
 
   const ficheClientComplete =
-    nomClient.trim() !== '' && prenomClient.trim() !== '' && telephoneValide(telephoneClient)
+    nomClient.trim() !== '' &&
+    prenomClient.trim() !== '' &&
+    telephoneValide(telephoneClient) &&
+    (emailClient.trim() === '' || emailValide(emailClient))
   const peutValider = ficheClientComplete && lignes.length > 0
 
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false)
@@ -261,6 +269,7 @@ export default function Commande({ benevole }) {
         p_nom_client: nomClient.trim(),
         p_prenom_client: prenomClient.trim(),
         p_telephone_client: telephoneClient.trim(),
+        p_email_client: emailClient.trim() || null,
       })
       if (error) echecs.push(ligne)
     }
@@ -272,6 +281,7 @@ export default function Commande({ benevole }) {
       setNomClient('')
       setPrenomClient('')
       setTelephoneClient('')
+      setEmailClient('')
       setMessageSucces('Commande enregistrée ✓')
       chargerCommandes()
     } else if (echecs.length === lignes.length) {
@@ -374,7 +384,25 @@ export default function Commande({ benevole }) {
               placeholder="06 12 34 56 78"
             />
           </div>
+          <div className="champ">
+            <label>Email du client (facultatif)</label>
+            <input
+              type="email"
+              value={emailClient}
+              onChange={(e) => setEmailClient(e.target.value)}
+              placeholder="client@exemple.fr"
+            />
+          </div>
         </div>
+
+        {emailClient.trim() !== '' && !emailValide(emailClient) && (
+          <p className="erreur" style={{ marginTop: -12 }}>
+            Adresse email incorrecte.
+          </p>
+        )}
+        <p style={{ color: 'var(--texte-clair)', fontSize: '0.85rem', marginTop: -12, marginBottom: 16 }}>
+          Si renseigné, le client reçoit automatiquement un récapitulatif de sa commande par email.
+        </p>
 
         <h3 style={{ marginBottom: 10 }}>Objet de la commande</h3>
 
@@ -620,6 +648,11 @@ export default function Commande({ benevole }) {
                       </td>
                       <td>
                         {c.prenom_client} {c.nom_client}
+                        {c.email_client && (
+                          <span title={`Recevra un récapitulatif : ${c.email_client}`} style={{ marginLeft: 4 }}>
+                            📧
+                          </span>
+                        )}
                       </td>
                       <td>{c.telephone_client}</td>
                       <td>
