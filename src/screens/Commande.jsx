@@ -148,6 +148,82 @@ export default function Commande({ benevole }) {
     if (!suppressionEnCours) setCommandeASupprimer(null)
   })
 
+  // --- Demandes d'annulation déposées par les clients eux-mêmes (page
+  // publique) : à examiner et accepter/refuser (responsables uniquement).
+  const [demandesAnnulation, setDemandesAnnulation] = useState([])
+  const [chargementDemandes, setChargementDemandes] = useState(true)
+  const [erreurDemandes, setErreurDemandes] = useState(null)
+  const [demandeAExaminer, setDemandeAExaminer] = useState(null) // { demande, decision }
+  const [pinDecision, setPinDecision] = useState('')
+  const [erreurDecision, setErreurDecision] = useState(null)
+  const [decisionEnCours, setDecisionEnCours] = useState(false)
+
+  useFermetureRetour(!!demandeAExaminer, () => {
+    if (!decisionEnCours) setDemandeAExaminer(null)
+  })
+
+  const demandesEnAttente = useMemo(
+    () => demandesAnnulation.filter((d) => d.statut === 'en_attente'),
+    [demandesAnnulation]
+  )
+
+  const chargerDemandesAnnulation = useCallback(async () => {
+    if (!estResponsable) {
+      setChargementDemandes(false)
+      return
+    }
+    setErreurDemandes(null)
+    const { data, error } = await supabase.rpc('lister_demandes_annulation', {
+      p_benevole_id: benevole.id,
+    })
+    if (error) {
+      setErreurDemandes("Impossible de charger les demandes d'annulation.")
+    } else {
+      setDemandesAnnulation(data || [])
+    }
+    setChargementDemandes(false)
+  }, [benevole.id, estResponsable])
+
+  useEffect(() => {
+    chargerDemandesAnnulation()
+  }, [chargerDemandesAnnulation])
+
+  function ouvrirDecision(demande, decision) {
+    setDemandeAExaminer({ demande, decision })
+    setPinDecision('')
+    setErreurDecision(null)
+  }
+
+  function fermerDecision() {
+    if (decisionEnCours) return
+    setDemandeAExaminer(null)
+  }
+
+  async function confirmerDecision() {
+    if (!/^\d{4}$/.test(pinDecision)) {
+      setErreurDecision('Le code doit contenir exactement 4 chiffres.')
+      return
+    }
+    setDecisionEnCours(true)
+    setErreurDecision(null)
+    const { error } = await supabase.rpc('traiter_demande_annulation', {
+      p_benevole_id: benevole.id,
+      p_pin: pinDecision,
+      p_demande_id: demandeAExaminer.demande.id,
+      p_decision: demandeAExaminer.decision,
+    })
+    setDecisionEnCours(false)
+    if (error) {
+      setErreurDecision(
+        error.message === 'Code PIN incorrect' ? 'Code PIN incorrect.' : error.message || 'Échec.'
+      )
+      return
+    }
+    setDemandeAExaminer(null)
+    chargerDemandesAnnulation()
+    chargerCommandes()
+  }
+
   const chargerCommandes = useCallback(async () => {
     if (!estResponsable) {
       setChargementCommandes(false)
@@ -416,6 +492,106 @@ export default function Commande({ benevole }) {
 
       {estResponsable && (
         <div className="bloc" style={{ marginTop: 32 }}>
+          <h2>
+            Demandes d'annulation (clients)
+            {demandesEnAttente.length > 0 && (
+              <span
+                style={{
+                  marginLeft: 10,
+                  background: 'var(--orange)',
+                  color: 'white',
+                  borderRadius: 999,
+                  padding: '2px 10px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  verticalAlign: 'middle',
+                }}
+              >
+                {demandesEnAttente.length}
+              </span>
+            )}
+          </h2>
+          {chargementDemandes && <p className="chargement">Chargement…</p>}
+          {erreurDemandes && <p className="erreur">{erreurDemandes}</p>}
+          {!chargementDemandes && !erreurDemandes && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="tableau-admin">
+                <thead>
+                  <tr>
+                    <th>Numéro</th>
+                    <th>Client</th>
+                    <th>Article</th>
+                    <th>Motif</th>
+                    <th>Date</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demandesAnnulation.map((d) => (
+                    <tr key={d.id}>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                        {d.numero_commande}
+                      </td>
+                      <td>
+                        {d.prenom_client || d.nom_client
+                          ? `${d.prenom_client || ''} ${d.nom_client || ''}`.trim()
+                          : '—'}
+                      </td>
+                      <td>
+                        {d.nom_produit || '—'}
+                        {d.taille ? ` · ${d.taille}` : ''}
+                        {d.quantite ? ` · Qté ${d.quantite}` : ''}
+                      </td>
+                      <td>{d.motif}</td>
+                      <td>{new Date(d.cree_le).toLocaleString('fr-FR')}</td>
+                      <td>
+                        {d.statut === 'traitee' ? (
+                          d.decision === 'annulee' ? (
+                            <span style={{ color: 'var(--vert)', fontWeight: 700 }}>✓ Annulée</span>
+                          ) : (
+                            <span style={{ color: 'var(--texte-clair)', fontWeight: 700 }}>Refusée</span>
+                          )
+                        ) : (
+                          <span style={{ color: 'var(--orange)', fontWeight: 700 }}>En attente</span>
+                        )}
+                      </td>
+                      <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {d.statut === 'en_attente' && (
+                          <>
+                            <button
+                              className="bouton-secondaire"
+                              onClick={() => ouvrirDecision(d, 'annulee')}
+                            >
+                              Accepter (annuler)
+                            </button>
+                            <button
+                              className="bouton-secondaire"
+                              onClick={() => ouvrirDecision(d, 'refusee')}
+                            >
+                              Refuser
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {demandesAnnulation.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
+                        Aucune demande d'annulation pour l'instant
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {estResponsable && (
+        <div className="bloc" style={{ marginTop: 32 }}>
           <h2>Suivi des commandes</h2>
           {chargementCommandes && <p className="chargement">Chargement…</p>}
           {erreurCommandes && <p className="erreur">{erreurCommandes}</p>}
@@ -424,6 +600,7 @@ export default function Commande({ benevole }) {
               <table className="tableau-admin">
                 <thead>
                   <tr>
+                    <th>Numéro</th>
                     <th>Client</th>
                     <th>Téléphone</th>
                     <th>Article</th>
@@ -438,6 +615,9 @@ export default function Commande({ benevole }) {
                 <tbody>
                   {commandes.map((c) => (
                     <tr key={c.id}>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                        {c.numero_commande || '—'}
+                      </td>
                       <td>
                         {c.prenom_client} {c.nom_client}
                       </td>
@@ -484,7 +664,7 @@ export default function Commande({ benevole }) {
                   ))}
                   {commandes.length === 0 && (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
+                      <td colSpan={10} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
                         Aucune commande enregistrée pour l'instant
                       </td>
                     </tr>
@@ -562,6 +742,61 @@ export default function Commande({ benevole }) {
                 }
               >
                 {suppressionEnCours ? 'Annulation…' : 'Annuler la commande'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {demandeAExaminer && (
+        <div className="fond-modale" onClick={fermerDecision}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>
+              {demandeAExaminer.decision === 'annulee'
+                ? 'Accepter cette demande et annuler la commande ?'
+                : 'Refuser cette demande d\'annulation ?'}
+            </h2>
+            <p>
+              {demandeAExaminer.demande.numero_commande} —{' '}
+              {demandeAExaminer.demande.prenom_client} {demandeAExaminer.demande.nom_client} —{' '}
+              {demandeAExaminer.demande.nom_produit}
+            </p>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              Motif indiqué par le client : « {demandeAExaminer.demande.motif} »
+            </p>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              {demandeAExaminer.decision === 'annulee'
+                ? 'La commande sera définitivement supprimée. '
+                : 'La commande restera en place, la demande sera simplement marquée refusée. '}
+              Confirme avec ton code PIN de responsable.
+            </p>
+            <div className="champ">
+              <label>Code PIN responsable</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                autoFocus
+                value={pinDecision}
+                onChange={(e) => setPinDecision(e.target.value.replace(/\D/g, ''))}
+                placeholder="1234"
+              />
+            </div>
+            {erreurDecision && <p className="erreur">{erreurDecision}</p>}
+            <div className="modale-actions">
+              <button className="bouton-secondaire" onClick={fermerDecision} disabled={decisionEnCours}>
+                Retour
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={confirmerDecision}
+                disabled={decisionEnCours || !/^\d{4}$/.test(pinDecision)}
+              >
+                {decisionEnCours
+                  ? 'Confirmation…'
+                  : demandeAExaminer.decision === 'annulee'
+                    ? 'Confirmer l\'annulation'
+                    : 'Confirmer le refus'}
               </button>
             </div>
           </div>
