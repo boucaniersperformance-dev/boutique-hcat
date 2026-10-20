@@ -1542,3 +1542,88 @@ table.tableau-admin .panneau-edition input[type="text"] {
 .case-palet:disabled {
   cursor: not-allowed;
 }
+
+/* ---------- Suivi des commandes : filtres, numéro cliquable, détail ---------- */
+
+.filtres-segments {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.filtres-segments span.etiquette {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--texte-clair);
+  margin-right: 2px;
+}
+
+.filtres-segments button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--bordure);
+  background: white;
+  color: var(--texte);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.filtres-segments button.selectionne {
+  border-color: var(--bleu);
+  background: var(--bleu);
+  color: white;
+}
+
+.lien-commande {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--bleu);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.lignes-pretes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 45vh;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.ligne-prete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--bordure);
+  cursor: pointer;
+}
+
+.ligne-prete input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  accent-color: var(--vert);
+}
+
+.ligne-prete.chargement {
+  opacity: 0.6;
+}
+
+.detail-commande-statuts {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bordure);
+}
