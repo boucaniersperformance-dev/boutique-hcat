@@ -40,7 +40,6 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
   const [ligneOuverte, setLigneOuverte] = useState(null)
   const [nomEdite, setNomEdite] = useState('')
   const [referenceEdite, setReferenceEdite] = useState('')
-  const [delaiCommandeEdite, setDelaiCommandeEdite] = useState('')
   const [delaiLivraisonEdite, setDelaiLivraisonEdite] = useState('')
   const [seuilReapproEdite, setSeuilReapproEdite] = useState('')
   const [erreurEditionProduit, setErreurEditionProduit] = useState(null)
@@ -504,9 +503,6 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
     setLigneOuverte(produit.id)
     setNomEdite(produit.nom)
     setReferenceEdite(produit.reference || '')
-    setDelaiCommandeEdite(
-      produit.delai_commande_jours != null ? String(produit.delai_commande_jours) : ''
-    )
     setDelaiLivraisonEdite(
       produit.delai_livraison_jours != null ? String(produit.delai_livraison_jours) : ''
     )
@@ -563,31 +559,26 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
   }
 
   async function enregistrerDelais(produit) {
-    const texteCommande = delaiCommandeEdite.trim()
     const texteLivraison = delaiLivraisonEdite.trim()
-    const delaiCommande = texteCommande === '' ? null : Math.max(0, parseInt(texteCommande, 10) || 0)
     const delaiLivraison = texteLivraison === '' ? null : Math.max(0, parseInt(texteLivraison, 10) || 0)
     setActionEditionEnCours(true)
     setErreurEditionProduit(null)
     const { error } = await supabase.rpc('definir_delais_produit', {
       p_benevole_id: benevole.id,
       p_produit_id: produit.id,
-      p_delai_commande_jours: delaiCommande,
       p_delai_livraison_jours: delaiLivraison,
     })
     setActionEditionEnCours(false)
     if (error) {
-      setErreurEditionProduit(error.message || "Erreur lors de l'enregistrement des délais.")
+      setErreurEditionProduit(error.message || "Erreur lors de l'enregistrement du délai.")
       return
     }
     setProduits((liste) =>
       liste.map((p) =>
-        p.id === produit.id
-          ? { ...p, delai_commande_jours: delaiCommande, delai_livraison_jours: delaiLivraison }
-          : p
+        p.id === produit.id ? { ...p, delai_livraison_jours: delaiLivraison } : p
       )
     )
-    afficherMessage(produit.id, 'Délais enregistrés ✓')
+    afficherMessage(produit.id, 'Délai enregistré ✓')
   }
 
   // Seuil de réapprovisionnement, réglé une fois pour tout l'article : en
@@ -1322,22 +1313,11 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
 
                       <div className="champ">
                         <label>
-                          Délais de réapprovisionnement (en jours), affichés
-                          sur la page Réapprovisionnement quand une taille
-                          manque de stock
+                          Délai de livraison (en jours), affiché sur la page
+                          Réapprovisionnement quand une taille manque de
+                          stock
                         </label>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                          <div>
-                            <label style={{ fontSize: '0.78rem' }}>Délai de commande</label>
-                            <input
-                              type="number"
-                              min="0"
-                              style={{ width: 90 }}
-                              value={delaiCommandeEdite}
-                              onChange={(e) => setDelaiCommandeEdite(e.target.value)}
-                              placeholder="jours"
-                            />
-                          </div>
                           <div>
                             <label style={{ fontSize: '0.78rem' }}>Délai de livraison</label>
                             <input
@@ -1353,12 +1333,11 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                             className="bouton-secondaire"
                             disabled={
                               actionEditionEnCours ||
-                              (delaiCommandeEdite.trim() === (produit.delai_commande_jours != null ? String(produit.delai_commande_jours) : '') &&
-                                delaiLivraisonEdite.trim() === (produit.delai_livraison_jours != null ? String(produit.delai_livraison_jours) : ''))
+                              delaiLivraisonEdite.trim() === (produit.delai_livraison_jours != null ? String(produit.delai_livraison_jours) : '')
                             }
                             onClick={() => enregistrerDelais(produit)}
                           >
-                            Enregistrer les délais
+                            Enregistrer le délai
                           </button>
                         </div>
                       </div>
