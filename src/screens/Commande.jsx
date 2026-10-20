@@ -7,6 +7,7 @@ import {
   photosProduit,
 } from '../constants.js'
 import CommandeAjoutModal from '../components/CommandeAjoutModal.jsx'
+import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 function telephoneValide(t) {
   return String(t || '').replace(/\D/g, '').length >= 10
@@ -134,6 +135,19 @@ export default function Commande({ benevole }) {
   const [erreurCommandes, setErreurCommandes] = useState(null)
   const [actionEnCours, setActionEnCours] = useState({})
 
+  // --- Annulation d'une commande : raison obligatoire + confirmation par
+  // le code PIN du responsable, même principe que la suppression d'une
+  // vente dans l'écran Historique.
+  const [commandeASupprimer, setCommandeASupprimer] = useState(null)
+  const [raisonSuppression, setRaisonSuppression] = useState('')
+  const [pinSuppression, setPinSuppression] = useState('')
+  const [erreurSuppression, setErreurSuppression] = useState(null)
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false)
+
+  useFermetureRetour(!!commandeASupprimer, () => {
+    if (!suppressionEnCours) setCommandeASupprimer(null)
+  })
+
   const chargerCommandes = useCallback(async () => {
     if (!estResponsable) {
       setChargementCommandes(false)
@@ -206,18 +220,46 @@ export default function Commande({ benevole }) {
     if (!error) chargerCommandes()
   }
 
-  async function supprimerCommande(commande) {
-    const confirme = window.confirm(
-      `Supprimer la commande de ${commande.prenom_client} ${commande.nom_client} (${commande.nom_produit}${commande.taille ? ' · ' + commande.taille : ''}) ?`
-    )
-    if (!confirme) return
-    setActionEnCours((e) => ({ ...e, [commande.id]: true }))
+  function ouvrirSuppression(commande) {
+    setCommandeASupprimer(commande)
+    setRaisonSuppression('')
+    setPinSuppression('')
+    setErreurSuppression(null)
+  }
+
+  function fermerSuppression() {
+    if (suppressionEnCours) return
+    setCommandeASupprimer(null)
+  }
+
+  async function confirmerSuppression() {
+    if (raisonSuppression.trim() === '') {
+      setErreurSuppression('Indique une raison pour annuler cette commande.')
+      return
+    }
+    if (!/^\d{4}$/.test(pinSuppression)) {
+      setErreurSuppression('Le code doit contenir exactement 4 chiffres.')
+      return
+    }
+    setSuppressionEnCours(true)
+    setErreurSuppression(null)
     const { error } = await supabase.rpc('supprimer_commande', {
       p_benevole_id: benevole.id,
-      p_commande_id: commande.id,
+      p_pin: pinSuppression,
+      p_commande_id: commandeASupprimer.id,
+      p_raison: raisonSuppression.trim(),
     })
-    setActionEnCours((e) => ({ ...e, [commande.id]: false }))
-    if (!error) chargerCommandes()
+    setSuppressionEnCours(false)
+    if (error) {
+      setErreurSuppression(
+        error.message === 'Code PIN incorrect'
+          ? 'Code PIN incorrect.'
+          : error.message || "L'annulation a échoué."
+      )
+      return
+    }
+    setCommandeASupprimer(null)
+    chargerCommandes()
   }
 
   return (
@@ -387,6 +429,7 @@ export default function Commande({ benevole }) {
                     <th>Article</th>
                     <th>Quantité</th>
                     <th>Enregistrée par</th>
+                    <th>Origine</th>
                     <th>Date</th>
                     <th>Statut</th>
                     <th>Actions</th>
@@ -405,6 +448,13 @@ export default function Commande({ benevole }) {
                       </td>
                       <td>{c.quantite}</td>
                       <td>{c.benevole_nom || '—'}</td>
+                      <td>
+                        {c.origine === 'public' ? (
+                          <span style={{ color: 'var(--bleu)', fontWeight: 700 }}>En ligne (QR)</span>
+                        ) : (
+                          <span style={{ color: 'var(--texte-clair)' }}>En boutique</span>
+                        )}
+                      </td>
                       <td>{new Date(c.created_at).toLocaleString('fr-FR')}</td>
                       <td>
                         {c.statut === 'traitee' ? (
@@ -423,18 +473,18 @@ export default function Commande({ benevole }) {
                         </button>
                         <button
                           className="bouton-icone"
-                          title="Supprimer cette commande"
+                          title="Annuler cette commande"
                           disabled={!!actionEnCours[c.id]}
-                          onClick={() => supprimerCommande(c)}
+                          onClick={() => ouvrirSuppression(c)}
                         >
-                          🗑️
+                          ×
                         </button>
                       </td>
                     </tr>
                   ))}
                   {commandes.length === 0 && (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
+                      <td colSpan={9} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
                         Aucune commande enregistrée pour l'instant
                       </td>
                     </tr>
@@ -456,6 +506,66 @@ export default function Commande({ benevole }) {
         >
           ⬆️
         </button>
+      )}
+
+      {commandeASupprimer && (
+        <div className="fond-modale" onClick={fermerSuppression}>
+          <div className="modale" onClick={(e) => e.stopPropagation()}>
+            <h2>Annuler cette commande ?</h2>
+            <p>
+              {commandeASupprimer.prenom_client} {commandeASupprimer.nom_client} —{' '}
+              {commandeASupprimer.nom_produit}
+              {commandeASupprimer.taille ? ` · ${commandeASupprimer.taille}` : ''} · Quantité :{' '}
+              {commandeASupprimer.quantite}
+            </p>
+            <p style={{ color: 'var(--texte-clair)' }}>
+              Cette action est irréversible. Indique la raison, puis confirme avec ton code PIN de
+              responsable.
+            </p>
+            <div className="champ">
+              <label>Raison</label>
+              <input
+                type="text"
+                autoFocus
+                value={raisonSuppression}
+                onChange={(e) => setRaisonSuppression(e.target.value)}
+                placeholder="Doublon, client désisté, erreur de saisie…"
+              />
+            </div>
+            <div className="champ">
+              <label>Code PIN responsable</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinSuppression}
+                onChange={(e) => setPinSuppression(e.target.value.replace(/\D/g, ''))}
+                placeholder="1234"
+              />
+            </div>
+            {erreurSuppression && <p className="erreur">{erreurSuppression}</p>}
+            <div className="modale-actions">
+              <button
+                className="bouton-secondaire"
+                onClick={fermerSuppression}
+                disabled={suppressionEnCours}
+              >
+                Retour
+              </button>
+              <button
+                className="bouton-principal"
+                onClick={confirmerSuppression}
+                disabled={
+                  suppressionEnCours ||
+                  raisonSuppression.trim() === '' ||
+                  !/^\d{4}$/.test(pinSuppression)
+                }
+              >
+                {suppressionEnCours ? 'Annulation…' : 'Annuler la commande'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
