@@ -12,6 +12,10 @@ function telephoneValide(t) {
   return String(t || '').replace(/\D/g, '').length >= 10
 }
 
+function emailValide(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim())
+}
+
 function cleLigne(produitId, taille) {
   return `${produitId}__${taille || ''}`
 }
@@ -91,6 +95,7 @@ export default function CommandePublique() {
   const [nomClient, setNomClient] = useState('')
   const [prenomClient, setPrenomClient] = useState('')
   const [telephoneClient, setTelephoneClient] = useState('')
+  const [emailClient, setEmailClient] = useState('')
   const [lignes, setLignes] = useState([])
 
   // Piège à robots : champ invisible pour un visiteur humain (masqué en
@@ -123,7 +128,10 @@ export default function CommandePublique() {
   }
 
   const ficheClientComplete =
-    nomClient.trim() !== '' && prenomClient.trim() !== '' && telephoneValide(telephoneClient)
+    nomClient.trim() !== '' &&
+    prenomClient.trim() !== '' &&
+    telephoneValide(telephoneClient) &&
+    (emailClient.trim() === '' || emailValide(emailClient))
   const peutValider = ficheClientComplete && lignes.length > 0
 
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false)
@@ -150,6 +158,7 @@ export default function CommandePublique() {
         p_prenom_client: prenomClient.trim(),
         p_telephone_client: telephoneClient.trim(),
         p_piege: piege,
+        p_email_client: emailClient.trim() || null,
       })
       if (error) {
         echecs.push(ligne)
@@ -167,6 +176,7 @@ export default function CommandePublique() {
       setNomClient('')
       setPrenomClient('')
       setTelephoneClient('')
+      setEmailClient('')
       setNumerosObtenus(numeros)
       setMessageSucces(
         numeros.length > 1
@@ -284,7 +294,25 @@ export default function CommandePublique() {
                 placeholder="06 12 34 56 78"
               />
             </div>
+            <div className="champ">
+              <label>Email (facultatif)</label>
+              <input
+                type="email"
+                value={emailClient}
+                onChange={(e) => setEmailClient(e.target.value)}
+                placeholder="toi@exemple.fr"
+              />
+            </div>
           </div>
+
+          {emailClient.trim() !== '' && !emailValide(emailClient) && (
+            <p className="erreur" style={{ marginTop: -12 }}>
+              Adresse email incorrecte.
+            </p>
+          )}
+          <p style={{ color: 'var(--texte-clair)', fontSize: '0.85rem', marginTop: -12, marginBottom: 16 }}>
+            Si tu renseignes ton email, tu recevras un récapitulatif de ta commande avec son numéro.
+          </p>
 
           {/* Piège à robots : laissé invisible pour un visiteur humain. */}
           <div
@@ -488,10 +516,11 @@ export default function CommandePublique() {
         </div>
 
         <p style={{ fontSize: '0.78rem', color: 'var(--texte-clair)', marginTop: 24, maxWidth: 680 }}>
-          Les informations transmises ci-dessus (nom, prénom, téléphone) sont utilisées
-          uniquement par les Boucaniers HCAT pour traiter ta demande, puis conservées 6 mois
-          maximum après traitement avant suppression automatique. Pour consulter, corriger ou
-          faire supprimer ces informations avant ce délai, contacte un responsable du club.
+          Les informations transmises ci-dessus (nom, prénom, téléphone, email si renseigné)
+          sont utilisées uniquement par les Boucaniers HCAT pour traiter ta demande et, si tu
+          as laissé ton email, t'envoyer la confirmation de ta commande — puis conservées 6
+          mois maximum après traitement avant suppression automatique. Pour consulter, corriger
+          ou faire supprimer ces informations avant ce délai, contacte un responsable du club.
         </p>
       </main>
 
