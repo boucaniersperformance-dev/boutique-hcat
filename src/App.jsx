@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ensureSupabaseSession, estUneSessionGoogle, supabase } from './supabaseClient'
 import Login from './screens/Login.jsx'
 import Vente from './screens/Vente.jsx'
@@ -41,6 +41,17 @@ export default function App() {
   // deconnecter), pour que le bouton "Changer de bénévole" donne un
   // retour visuel immédiat plutôt que de sembler ne rien faire.
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false)
+
+  // Notifications "nouvelle commande" pour les responsables : un rond
+  // rouge sur l'onglet Commande (nombre de commandes + demandes
+  // d'annulation en attente) et une bulle affichée une fois à l'ouverture
+  // de session s'il y a quelque chose à traiter. Le compteur redescend
+  // tout seul au fur et à mesure que les commandes sont marquées
+  // traitées et que les demandes d'annulation sont tranchées — rien à
+  // "marquer comme lu".
+  const [notifications, setNotifications] = useState(null) // null = pas encore chargé
+  const [bulleNotifVisible, setBulleNotifVisible] = useState(false)
+  const bulleDejaMontree = useRef(false)
 
   useEffect(() => {
     ensureSupabaseSession()
@@ -156,6 +167,59 @@ export default function App() {
     }
   }, [pret, benevole])
 
+  // Charge le nombre de commandes et de demandes d'annulation en attente
+  // (responsables uniquement), et le rafraîchit régulièrement pour que le
+  // rond sur l'onglet Commande reste à jour même si le responsable reste
+  // sur un autre écran — utile notamment pour repérer les commandes
+  // passées depuis la page publique (QR code).
+  const estResponsablePourNotif = benevole?.role === 'responsable'
+  const chargerNotifications = useCallback(async () => {
+    if (!benevole || !estResponsablePourNotif) return
+    const { data, error } = await supabase.rpc('compter_notifications_responsable', {
+      p_benevole_id: benevole.id,
+    })
+    if (error) return
+    const ligne = Array.isArray(data) ? data[0] : data
+    if (!ligne) return
+    setNotifications({
+      commandes: ligne.commandes_en_attente || 0,
+      annulations: ligne.demandes_annulation_en_attente || 0,
+    })
+  }, [benevole, estResponsablePourNotif])
+
+  useEffect(() => {
+    if (!pret || !benevole || !estResponsablePourNotif) {
+      setNotifications(null)
+      return
+    }
+    chargerNotifications()
+    const intervalle = setInterval(chargerNotifications, 45000)
+    return () => clearInterval(intervalle)
+  }, [pret, benevole, estResponsablePourNotif, chargerNotifications])
+
+  // Dès que le premier comptage arrive après une connexion, si quelque
+  // chose attend un responsable, on affiche la bulle une fois (pas à
+  // chaque rafraîchissement du compteur, juste à l'ouverture de session).
+  useEffect(() => {
+    if (!notifications || bulleDejaMontree.current) return
+    bulleDejaMontree.current = true
+    if (notifications.commandes + notifications.annulations > 0) {
+      setBulleNotifVisible(true)
+    }
+  }, [notifications])
+
+  useEffect(() => {
+    if (!benevole) bulleDejaMontree.current = false
+  }, [benevole])
+
+  // Recharge le compteur à chaque passage par l'écran Commande (en y
+  // entrant pour avoir un chiffre à jour, et en le quittant pour refléter
+  // tout de suite les commandes traitées ou les décisions prises, sans
+  // attendre le prochain rafraîchissement automatique).
+  useEffect(() => {
+    if (ecran === 'commande') chargerNotifications()
+  }, [ecran, chargerNotifications])
+
   // Si le réglage est désactivé pendant qu'un bénévole se trouve sur
   // l'écran "Jeux du palet" (rare, mais possible si un responsable le
   // désactive entretemps ailleurs), on le ramène sur l'écran de vente
@@ -213,9 +277,40 @@ export default function App() {
   }
 
   const estResponsable = benevole.role === 'responsable'
+  const totalNotifications = notifications ? notifications.commandes + notifications.annulations : 0
 
   return (
     <div className="app">
+      {estResponsable && bulleNotifVisible && notifications && totalNotifications > 0 && (
+        <div className="bulle-notif">
+          <div className="bulle-notif-texte">
+            <strong>
+              {totalNotifications === 1 ? 'Nouvel élément' : 'Nouveaux éléments'} à traiter
+            </strong>
+            <span>
+              {notifications.commandes > 0 &&
+                `${notifications.commandes} commande${notifications.commandes > 1 ? 's' : ''} en attente`}
+              {notifications.commandes > 0 && notifications.annulations > 0 && ' · '}
+              {notifications.annulations > 0 &&
+                `${notifications.annulations} demande${notifications.annulations > 1 ? 's' : ''} d'annulation`}
+            </span>
+          </div>
+          <div className="bulle-notif-actions">
+            <button
+              className="bouton-principal"
+              onClick={() => {
+                setEcran('commande')
+                setBulleNotifVisible(false)
+              }}
+            >
+              Voir
+            </button>
+            <button className="bulle-notif-fermer" onClick={() => setBulleNotifVisible(false)}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       <header className="entete">
         <div className="entete-titre">
           <img src="/logo.png" alt="" className="logo-entete" />
@@ -243,10 +338,13 @@ export default function App() {
             Gourde
           </button>
           <button
-            className={ecran === 'commande' ? 'actif' : ''}
+            className={`bouton-avec-badge ${ecran === 'commande' ? 'actif' : ''}`}
             onClick={() => setEcran('commande')}
           >
             Commande
+            {estResponsable && totalNotifications > 0 && (
+              <span className="badge-notif">{totalNotifications}</span>
+            )}
           </button>
           {estResponsable && (
             <>
