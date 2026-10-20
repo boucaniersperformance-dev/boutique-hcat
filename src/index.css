@@ -149,8 +149,8 @@ input {
   right: 16px;
   z-index: 50;
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  gap: 10px;
   background: var(--carte);
   color: var(--texte);
   border: 1px solid var(--bordure);
@@ -159,28 +159,30 @@ input {
   padding: 14px 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   max-width: min(92vw, 420px);
+  min-width: min(92vw, 320px);
 }
 
-.bulle-notif-texte {
+.bulle-notif-entete {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.bulle-notif-texte strong {
+.bulle-notif-entete strong {
   font-size: 0.98rem;
 }
 
-.bulle-notif-texte span {
-  color: var(--texte-clair);
-}
-
-.bulle-notif-actions {
+.bulle-notif-ligne {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+}
+
+.bulle-notif-ligne span {
+  color: var(--texte-clair);
 }
 
 .bulle-notif-fermer {
@@ -188,8 +190,9 @@ input {
   border: none;
   color: var(--texte-clair);
   font-size: 1rem;
-  padding: 6px;
+  padding: 2px 6px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .entete-benevole {
