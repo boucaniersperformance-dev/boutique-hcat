@@ -149,8 +149,8 @@ export default function Reapprovisionnement({ benevole }) {
 
         <p style={{ color: 'var(--texte-clair)' }}>
           Liste des tailles dont le stock est au niveau (ou en dessous) du
-          seuil d'alerte de leur article. Configure le seuil et les délais
-          de commande/livraison depuis l'onglet <strong>Produits</strong>,
+          seuil d'alerte de leur article. Configure le seuil et le délai de
+          livraison depuis l'onglet <strong>Produits</strong>,
           en ouvrant la fiche de l'article puis le panneau «&nbsp;✏️
           Modifier&nbsp;» — un seul seuil réglé pour tout l'article
           s'applique automatiquement à chacune de ses tailles (ex. : seuil
@@ -183,9 +183,6 @@ export default function Reapprovisionnement({ benevole }) {
                     <th>Taille</th>
                     <th>Stock actuel</th>
                     <th>Seuil</th>
-                    <th title="Délai estimé pour passer la commande auprès du fournisseur">
-                      Délai de commande
-                    </th>
                     <th title="Délai estimé entre la commande passée et la réception">
                       Délai de livraison
                     </th>
@@ -215,7 +212,6 @@ export default function Reapprovisionnement({ benevole }) {
                           </span>
                         </td>
                         <td>{l.seuil_reappro}</td>
-                        <td>{texteDelai(l.delai_commande_jours)}</td>
                         <td>{texteDelai(l.delai_livraison_jours)}</td>
                         <td>
                           <input
