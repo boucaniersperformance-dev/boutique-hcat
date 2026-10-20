@@ -167,11 +167,12 @@ export default function App() {
     }
   }, [pret, benevole])
 
-  // Charge le nombre de commandes et de demandes d'annulation en attente
-  // (responsables uniquement), et le rafraîchit régulièrement pour que le
-  // rond sur l'onglet Commande reste à jour même si le responsable reste
-  // sur un autre écran — utile notamment pour repérer les commandes
-  // passées depuis la page publique (QR code).
+  // Charge le nombre de commandes et de demandes d'annulation en attente,
+  // ainsi que le nombre de tailles en alerte de réapprovisionnement
+  // (responsables uniquement), et le rafraîchit régulièrement pour que les
+  // ronds sur les onglets Commande et Réapprovisionnement restent à jour
+  // même si le responsable reste sur un autre écran — utile notamment pour
+  // repérer les commandes passées depuis la page publique (QR code).
   const estResponsablePourNotif = benevole?.role === 'responsable'
   const chargerNotifications = useCallback(async () => {
     if (!benevole || !estResponsablePourNotif) return
@@ -184,6 +185,7 @@ export default function App() {
     setNotifications({
       commandes: ligne.commandes_en_attente || 0,
       annulations: ligne.demandes_annulation_en_attente || 0,
+      reappro: ligne.reappro_en_alerte || 0,
     })
   }, [benevole, estResponsablePourNotif])
 
@@ -203,7 +205,7 @@ export default function App() {
   useEffect(() => {
     if (!notifications || bulleDejaMontree.current) return
     bulleDejaMontree.current = true
-    if (notifications.commandes + notifications.annulations > 0) {
+    if (notifications.commandes + notifications.annulations + notifications.reappro > 0) {
       setBulleNotifVisible(true)
     }
   }, [notifications])
@@ -212,12 +214,12 @@ export default function App() {
     if (!benevole) bulleDejaMontree.current = false
   }, [benevole])
 
-  // Recharge le compteur à chaque passage par l'écran Commande (en y
-  // entrant pour avoir un chiffre à jour, et en le quittant pour refléter
-  // tout de suite les commandes traitées ou les décisions prises, sans
+  // Recharge le compteur à chaque passage par l'écran Commande ou
+  // Réapprovisionnement (en y entrant pour avoir un chiffre à jour, et en
+  // le quittant pour refléter tout de suite les actions prises, sans
   // attendre le prochain rafraîchissement automatique).
   useEffect(() => {
-    if (ecran === 'commande') chargerNotifications()
+    if (ecran === 'commande' || ecran === 'reappro') chargerNotifications()
   }, [ecran, chargerNotifications])
 
   // Si le réglage est désactivé pendant qu'un bénévole se trouve sur
@@ -277,38 +279,59 @@ export default function App() {
   }
 
   const estResponsable = benevole.role === 'responsable'
-  const totalNotifications = notifications ? notifications.commandes + notifications.annulations : 0
+  const totalNotifCommande = notifications ? notifications.commandes + notifications.annulations : 0
+  const totalNotifReappro = notifications ? notifications.reappro : 0
+  const totalNotifications = totalNotifCommande + totalNotifReappro
 
   return (
     <div className="app">
       {estResponsable && bulleNotifVisible && notifications && totalNotifications > 0 && (
         <div className="bulle-notif">
-          <div className="bulle-notif-texte">
+          <div className="bulle-notif-entete">
             <strong>
               {totalNotifications === 1 ? 'Nouvel élément' : 'Nouveaux éléments'} à traiter
             </strong>
-            <span>
-              {notifications.commandes > 0 &&
-                `${notifications.commandes} commande${notifications.commandes > 1 ? 's' : ''} en attente`}
-              {notifications.commandes > 0 && notifications.annulations > 0 && ' · '}
-              {notifications.annulations > 0 &&
-                `${notifications.annulations} demande${notifications.annulations > 1 ? 's' : ''} d'annulation`}
-            </span>
-          </div>
-          <div className="bulle-notif-actions">
-            <button
-              className="bouton-principal"
-              onClick={() => {
-                setEcran('commande')
-                setBulleNotifVisible(false)
-              }}
-            >
-              Voir
-            </button>
             <button className="bulle-notif-fermer" onClick={() => setBulleNotifVisible(false)}>
               ✕
             </button>
           </div>
+          {totalNotifCommande > 0 && (
+            <div className="bulle-notif-ligne">
+              <span>
+                {notifications.commandes > 0 &&
+                  `${notifications.commandes} commande${notifications.commandes > 1 ? 's' : ''} en attente`}
+                {notifications.commandes > 0 && notifications.annulations > 0 && ' · '}
+                {notifications.annulations > 0 &&
+                  `${notifications.annulations} demande${notifications.annulations > 1 ? 's' : ''} d'annulation`}
+              </span>
+              <button
+                className="bouton-principal"
+                onClick={() => {
+                  setEcran('commande')
+                  setBulleNotifVisible(false)
+                }}
+              >
+                Voir
+              </button>
+            </div>
+          )}
+          {totalNotifReappro > 0 && (
+            <div className="bulle-notif-ligne">
+              <span>
+                {notifications.reappro} taille{notifications.reappro > 1 ? 's' : ''} à
+                réapprovisionner
+              </span>
+              <button
+                className="bouton-principal"
+                onClick={() => {
+                  setEcran('reappro')
+                  setBulleNotifVisible(false)
+                }}
+              >
+                Voir
+              </button>
+            </div>
+          )}
         </div>
       )}
       <header className="entete">
@@ -342,8 +365,8 @@ export default function App() {
             onClick={() => setEcran('commande')}
           >
             Commande
-            {estResponsable && totalNotifications > 0 && (
-              <span className="badge-notif">{totalNotifications}</span>
+            {estResponsable && totalNotifCommande > 0 && (
+              <span className="badge-notif">{totalNotifCommande}</span>
             )}
           </button>
           {estResponsable && (
@@ -361,10 +384,13 @@ export default function App() {
                 Bénévoles
               </button>
               <button
-                className={ecran === 'reappro' ? 'actif' : ''}
+                className={`bouton-avec-badge ${ecran === 'reappro' ? 'actif' : ''}`}
                 onClick={() => setEcran('reappro')}
               >
                 Réapprovisionnement
+                {totalNotifReappro > 0 && (
+                  <span className="badge-notif">{totalNotifReappro}</span>
+                )}
               </button>
               <button
                 className={ecran === 'historique' ? 'actif' : ''}
