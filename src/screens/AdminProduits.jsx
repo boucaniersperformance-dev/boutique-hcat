@@ -1153,66 +1153,85 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
                   />
                 </td>
                 <td>
-                  {(produit.variantes_produit || [])
-                    .slice()
-                    .sort((a, b) => comparerTailles(a.taille, b.taille))
-                    .map((variante) => (
-                      <div
-                        key={variante.id}
-                        style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}
-                      >
-                        {variante.taille && (
-                          <>
-                            <span>{variante.taille}</span>
-                            <button
-                              type="button"
-                              className="bouton-icone"
-                              title="Corriger le libellé de cette taille"
-                              onClick={() => ouvrirModificationTaille(produit, variante)}
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              type="button"
-                              className="bouton-icone"
-                              title="Supprimer cette taille"
-                              disabled={!!suppressionTailleEnCours[variante.id]}
-                              onClick={() => supprimerTailleVariante(produit, variante)}
-                            >
-                              ×
-                            </button>
-                          </>
-                        )}
-                        <input
-                          type="number"
-                          min="0"
-                          defaultValue={variante.stock_qty}
-                          title="Stock actuel"
-                          style={{ width: 56 }}
-                          onBlur={(e) => {
-                            if (parseInt(e.target.value, 10) !== variante.stock_qty) {
-                              sauvegarderStock(variante, produit.id, e.target.value)
-                            }
-                          }}
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          defaultValue={variante.seuil_reappro ?? ''}
-                          placeholder="seuil"
-                          title="Seuil de réapprovisionnement pour cette taille — vide = pas d'alerte"
-                          style={{ width: 64 }}
-                          onBlur={(e) => {
-                            const texte = e.target.value.trim()
-                            const valeurActuelle =
-                              variante.seuil_reappro != null ? String(variante.seuil_reappro) : ''
-                            if (texte !== valeurActuelle) {
-                              sauvegarderSeuilReappro(variante, produit.id, e.target.value)
-                            }
-                          }}
-                        />
-                      </div>
-                    ))}
+                  {(produit.variantes_produit || []).length > 0 && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'auto 56px 64px',
+                        columnGap: 6,
+                        rowGap: 4,
+                        alignItems: 'center',
+                        marginBottom: 6,
+                      }}
+                    >
+                      <span />
+                      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--texte-clair)' }}>
+                        Stock
+                      </span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--texte-clair)' }}>
+                        Seuil
+                      </span>
+                      {(produit.variantes_produit || [])
+                        .slice()
+                        .sort((a, b) => comparerTailles(a.taille, b.taille))
+                        .map((variante) => (
+                          <Fragment key={variante.id}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {variante.taille && (
+                                <>
+                                  <span>{variante.taille}</span>
+                                  <button
+                                    type="button"
+                                    className="bouton-icone"
+                                    title="Corriger le libellé de cette taille"
+                                    onClick={() => ouvrirModificationTaille(produit, variante)}
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="bouton-icone"
+                                    title="Supprimer cette taille"
+                                    disabled={!!suppressionTailleEnCours[variante.id]}
+                                    onClick={() => supprimerTailleVariante(produit, variante)}
+                                  >
+                                    ×
+                                  </button>
+                                </>
+                              )}
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              defaultValue={variante.stock_qty}
+                              title="Stock actuel"
+                              style={{ width: 56 }}
+                              onBlur={(e) => {
+                                if (parseInt(e.target.value, 10) !== variante.stock_qty) {
+                                  sauvegarderStock(variante, produit.id, e.target.value)
+                                }
+                              }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              defaultValue={variante.seuil_reappro ?? ''}
+                              placeholder="seuil"
+                              title="Seuil de réapprovisionnement pour cette taille — vide = pas d'alerte"
+                              style={{ width: 64 }}
+                              onBlur={(e) => {
+                                const texte = e.target.value.trim()
+                                const valeurActuelle =
+                                  variante.seuil_reappro != null ? String(variante.seuil_reappro) : ''
+                                if (texte !== valeurActuelle) {
+                                  sauvegarderSeuilReappro(variante, produit.id, e.target.value)
+                                }
+                              }}
+                            />
+                          </Fragment>
+                        ))}
+                    </div>
+                  )}
                   {produit.necessite_taille && (
                     <button
                       type="button"
