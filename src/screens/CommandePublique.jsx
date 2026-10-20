@@ -166,54 +166,36 @@ export default function CommandePublique() {
     setMessageSucces(null)
     setNumerosObtenus([])
 
-    const echecs = []
-    const numeros = []
-    let dernierMessageErreur = null
-    for (const ligne of lignes) {
-      const { data, error } = await supabase.rpc('enregistrer_commande_publique', {
-        p_produit_id: ligne.produit_id,
-        p_taille: ligne.taille,
-        p_quantite: ligne.quantite,
-        p_nom_client: nomClient.trim(),
-        p_prenom_client: prenomClient.trim(),
-        p_telephone_client: telephoneClient.trim(),
-        p_piege: piege,
-        p_email_client: emailClient.trim() || null,
-      })
-      if (error) {
-        echecs.push(ligne)
-        dernierMessageErreur = error.message
-      } else {
-        const ligneResultat = Array.isArray(data) ? data[0] : data
-        if (ligneResultat?.numero_commande) numeros.push(ligneResultat.numero_commande)
-      }
-    }
+    const { data, error } = await supabase.rpc('enregistrer_commande_publique', {
+      p_lignes: lignes.map((l) => ({
+        produit_id: l.produit_id,
+        taille: l.taille,
+        quantite: l.quantite,
+      })),
+      p_nom_client: nomClient.trim(),
+      p_prenom_client: prenomClient.trim(),
+      p_telephone_client: telephoneClient.trim(),
+      p_piege: piege,
+      p_email_client: emailClient.trim() || null,
+    })
 
     setEnregistrementEnCours(false)
 
-    if (echecs.length === 0) {
-      setLignes([])
-      setNomClient('')
-      setPrenomClient('')
-      setTelephoneClient('')
-      setEmailClient('')
-      setNumerosObtenus(numeros)
-      setMessageSucces(
-        numeros.length > 1
-          ? 'Commande enregistrée ✓ — un(e) responsable du club te recontactera. Garde ces numéros, ils te serviront si tu dois faire une demande d\'annulation :'
-          : 'Commande enregistrée ✓ — un(e) responsable du club te recontactera. Garde ce numéro, il te servira si tu dois faire une demande d\'annulation :'
-      )
-    } else if (echecs.length === lignes.length) {
-      setErreurEnvoi(
-        dernierMessageErreur || "L'enregistrement a échoué. Réessaie."
-      )
-    } else {
-      setLignes(echecs)
-      setNumerosObtenus(numeros)
-      setErreurEnvoi(
-        `${lignes.length - echecs.length} article(s) enregistré(s), ${echecs.length} en échec — ${dernierMessageErreur || 'réessaie pour l\'article restant.'}`
-      )
+    if (error) {
+      setErreurEnvoi(error.message || "L'enregistrement a échoué. Réessaie.")
+      return
     }
+
+    const resultat = Array.isArray(data) ? data[0] : data
+    setLignes([])
+    setNomClient('')
+    setPrenomClient('')
+    setTelephoneClient('')
+    setEmailClient('')
+    setNumerosObtenus(resultat?.numero_commande ? [resultat.numero_commande] : [])
+    setMessageSucces(
+      'Commande enregistrée ✓ — un(e) responsable du club te recontactera. Garde ce numéro, il te servira si tu dois faire une demande d\'annulation :'
+    )
   }
 
   // --- Annulation d'une commande déjà déposée : le client ne peut pas
@@ -584,8 +566,7 @@ export default function CommandePublique() {
                       onClick={() => setCommandeSelectionnee(c.numero_commande)}
                     >
                       <span>
-                        <strong>{c.nom_produit}</strong>
-                        {c.taille ? ` · ${c.taille}` : ''} · Qté {c.quantite}
+                        <strong>{c.articles || '—'}</strong>
                         <br />
                         <span style={{ fontSize: '0.78rem', color: 'var(--texte-clair)' }}>
                           {c.numero_commande} · {new Date(c.created_at).toLocaleDateString('fr-FR')}
