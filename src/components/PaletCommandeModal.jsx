@@ -1,50 +1,62 @@
-import { useState } from 'react'
-import { formatEuros } from '../constants.js'
+import { useMemo, useState } from 'react'
+import { formatEuros, comparerTailles, SEUIL_STOCK_BAS, photosProduit } from '../constants.js'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
-const NUMERO_PALET_MAX = 80
-const CASES_PALET = Array.from({ length: NUMERO_PALET_MAX + 1 }, (_, n) => n)
-
-function deuxChiffres(n) {
-  return String(n).padStart(2, '0')
-}
-
-// Modale de commande « Jeux du palet » depuis la page Vente : même
-// tableau de numéros que l'onglet dédié (00 à 80), pour pouvoir
-// l'ajouter au panier avec le reste des articles et tout encaisser en
-// une seule fois.
-export default function PaletCommandeModal({
-  produit,
-  numerosDejaVendus,
-  numerosDansLePanier,
-  onValider,
-  onValiderEtPayer,
-  onFermer,
-  outilsPalet,
-}) {
+// Modale d'ajout au panier : demande la taille (si nécessaire) puis la quantité.
+//
+// outilsPalet (optionnel) : uniquement pour l'article « Jeux du palet », et
+// seulement affiché par l'appelant aux responsables — { nombreVendu,
+// lotDejaOffert, onOffrirLot } — ajoute en haut à droite la bulle "vendu …"
+// et le trophée pour offrir un lot (voir Vente.jsx).
+export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFermer, outilsPalet }) {
+  // La touche/geste "retour" du téléphone referme cette modale au lieu de
+  // faire quitter l'application.
   useFermetureRetour(true, onFermer)
-  const [numero, setNumero] = useState('')
-  const [nom, setNom] = useState('')
-  const [telephone, setTelephone] = useState('')
 
-  const numeroInt = numero !== '' ? parseInt(numero, 10) : null
-  const complet = numeroInt !== null && nom.trim() !== ''
+  // Les tailles proposées ici viennent des déclinaisons réellement créées
+  // sur le produit (onglet Produits) — jamais d'une liste figée — pour que
+  // ce qui s'affiche au clic corresponde toujours à ce qui est configuré
+  // (y compris les tailles ajoutées à la main ou via "Âge précis" /
+  // "Tranche d'âge"). Une taille épuisée reste listée (grisée) plutôt que
+  // masquée, pour rester sélectionnable si le stock réel diffère.
+  const tailles = useMemo(
+    () =>
+      produit.necessite_taille
+        ? (produit.variantes_produit || [])
+            .map((v) => v.taille)
+            .filter(Boolean)
+            .sort(comparerTailles)
+        : [],
+    [produit]
+  )
+  const photos = useMemo(() => photosProduit(produit), [produit])
+  const [indexPhoto, setIndexPhoto] = useState(0)
+  const [taille, setTaille] = useState(tailles.length === 1 ? tailles[0] : null)
+  const [quantite, setQuantite] = useState(1)
 
-  function choisirNumero(n) {
-    setNumero((actuel) => (actuel !== '' && parseInt(actuel, 10) === n ? '' : String(n)))
+  function stockPourTaille(t) {
+    const variante = (produit.variantes_produit || []).find(
+      (v) => (v.taille || null) === (t || null)
+    )
+    return variante ? variante.stock_qty : null
   }
 
-  function details() {
-    return {
-      numero: numeroInt,
-      nom: nom.trim(),
-      telephone: telephone.trim(),
-    }
+  const stockDisponible = stockPourTaille(taille)
+  const attenteTaille = produit.necessite_taille && !taille
+
+  function valider() {
+    if (attenteTaille) return
+    onValider({ taille, quantite })
+  }
+
+  function validerEtPayer() {
+    if (attenteTaille) return
+    onValiderEtPayer({ taille, quantite })
   }
 
   return (
     <div className="fond-modale" onClick={onFermer}>
-      <div className="modale modale-large" onClick={(e) => e.stopPropagation()}>
+      <div className="modale modale-produit" onClick={(e) => e.stopPropagation()}>
         <div className="entete-produit">
           <h2>{produit.nom}</h2>
           {outilsPalet && (
@@ -53,12 +65,9 @@ export default function PaletCommandeModal({
               <button
                 type="button"
                 className="bouton-trophee"
-                disabled={!outilsPalet.matchActif || outilsPalet.lotDejaOffert}
                 title={
-                  !outilsPalet.matchActif
-                    ? 'Démarre un match pour pouvoir offrir un lot'
-                    : outilsPalet.lotDejaOffert
-                    ? 'Un lot a déjà été offert pour ce match'
+                  outilsPalet.lotDejaOffert
+                    ? 'Un lot a déjà été offert aujourd’hui — offrir un autre lot'
                     : 'Offrir un lot (jeu du palet)'
                 }
                 onClick={outilsPalet.onOffrirLot}
@@ -69,68 +78,114 @@ export default function PaletCommandeModal({
           )}
         </div>
         <p style={{ color: 'var(--texte-clair)' }}>
-          {formatEuros(produit.prix)} le numéro, de 00 à {deuxChiffres(NUMERO_PALET_MAX)}.
+          {formatEuros(produit.prix)} / unité
         </p>
 
-        <div className="grille-palets-legende">
-          <span>
-            <i className="pastille-legende" /> Disponible
-          </span>
-          <span>
-            <i className="pastille-legende en-panier" /> Dans le panier
-          </span>
-          <span>
-            <i className="pastille-legende vendu" /> Déjà vendu aujourd'hui
-          </span>
-        </div>
-
-        <div className="grille-palets">
-          {CASES_PALET.map((n) => {
-            const vendu = numerosDejaVendus.has(n)
-            const enPanier = numerosDansLePanier.has(n)
-            const selectionne = numeroInt === n
-            const indisponible = vendu || enPanier
-            return (
-              <button
-                key={n}
-                type="button"
-                className={
-                  'case-palet' +
-                  (selectionne ? ' selectionne' : '') +
-                  (vendu ? ' vendu' : '') +
-                  (enPanier ? ' en-panier' : '')
-                }
-                disabled={indisponible}
-                onClick={() => choisirNumero(n)}
-              >
-                {deuxChiffres(n)}
-              </button>
-            )
-          })}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginTop: 16 }}>
-          <div className="champ">
-            <label>
-              Nom et prénom {numeroInt !== null && `(numéro ${deuxChiffres(numeroInt)})`}
-            </label>
-            <input
-              value={nom}
-              autoComplete="off"
-              placeholder="Ex : Jean Dupont"
-              onChange={(e) => setNom(e.target.value)}
-            />
+        <div className="ajout-corps">
+          <div className="ajout-photo-col">
+            <div
+              className="produit-image galerie-photo"
+              onClick={() =>
+                photos.length > 1 &&
+                setIndexPhoto((i) => (i + 1) % photos.length)
+              }
+            >
+              {photos.length ? <img src={photos[indexPhoto]} alt={produit.nom} /> : '🛍️'}
+            </div>
+            {photos.length > 1 && (
+              <div className="galerie-points">
+                {photos.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`galerie-point${i === indexPhoto ? ' actif' : ''}`}
+                    aria-label={`Photo ${i + 1}`}
+                    onClick={() => setIndexPhoto(i)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-          <div className="champ">
-            <label>Téléphone (optionnel)</label>
-            <input
-              value={telephone}
-              type="tel"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="0612345678"
-              onChange={(e) => setTelephone(e.target.value)}
-            />
+
+          <div className="ajout-choix-col">
+            {produit.necessite_taille && (
+              <>
+                <p>
+                  <strong>Taille</strong>
+                </p>
+                <div className="choix-tailles">
+                  {tailles.map((t) => {
+                    const stock = stockPourTaille(t)
+                    const rupture = stock !== null && stock <= 0
+                    const bas = stock !== null && stock > 0 && stock <= SEUIL_STOCK_BAS
+                    const classes = ['bouton-taille']
+                    if (taille === t) classes.push('selectionne')
+                    if (rupture) classes.push('epuise')
+                    else if (bas) classes.push('stock-bas')
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        className={classes.join(' ')}
+                        onClick={() => setTaille(t)}
+                      >
+                        <span className="taille-label">{t}</span>
+                        {stock !== null && (
+                          <span className="taille-stock">
+                            {rupture ? 'Rupture' : stock}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+                {tailles.some((t) => {
+                  const s = stockPourTaille(t)
+                  return s !== null && s <= 0
+                }) && (
+                  <p style={{ fontSize: '0.78rem', color: 'var(--texte-clair)', textAlign: 'center' }}>
+                    Les tailles grisées sont annoncées à 0 en stock — encore
+                    sélectionnables si tu sais qu'il en reste physiquement.
+                  </p>
+                )}
+              </>
+            )}
+
+            {!attenteTaille && (
+              <>
+                {stockDisponible !== null && (
+                  <p
+                    style={{
+                      textAlign: 'center',
+                      color:
+                        stockDisponible <= 0
+                          ? 'var(--rouge)'
+                          : stockDisponible <= SEUIL_STOCK_BAS
+                          ? 'var(--orange)'
+                          : 'var(--texte-clair)',
+                    }}
+                  >
+                    {stockDisponible <= 0
+                      ? 'Stock annoncé à 0 — vérifie physiquement avant de vendre'
+                      : `Stock restant : ${stockDisponible}`}
+                  </p>
+                )}
+
+                <div className="quantite-zone">
+                  <button
+                    onClick={() => setQuantite((q) => Math.max(1, q - 1))}
+                  >
+                    −
+                  </button>
+                  <span className="quantite-valeur">{quantite}</span>
+                  <button onClick={() => setQuantite((q) => q + 1)}>+</button>
+                </div>
+
+                <p style={{ textAlign: 'center', fontWeight: 700 }}>
+                  Sous-total : {formatEuros(produit.prix * quantite)}
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -138,14 +193,18 @@ export default function PaletCommandeModal({
           <button className="bouton-secondaire" onClick={onFermer}>
             Annuler
           </button>
-          <button className="bouton-principal" disabled={!complet} onClick={() => onValider(details())}>
+          <button
+            className="bouton-principal"
+            disabled={attenteTaille}
+            onClick={valider}
+          >
             Ajouter au panier
           </button>
         </div>
         <button
           className="bouton-payer-maintenant"
-          disabled={!complet}
-          onClick={() => onValiderEtPayer(details())}
+          disabled={attenteTaille}
+          onClick={validerEtPayer}
         >
           ⚡ Payer maintenant
         </button>
@@ -153,3 +212,4 @@ export default function PaletCommandeModal({
     </div>
   )
 }
+
