@@ -3,7 +3,12 @@ import { formatEuros, comparerTailles, SEUIL_STOCK_BAS, photosProduit } from '..
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 // Modale d'ajout au panier : demande la taille (si nécessaire) puis la quantité.
-export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFermer }) {
+//
+// outilsPalet (optionnel) : uniquement pour l'article « Jeux du palet », et
+// seulement affiché par l'appelant aux responsables — { nombreVendu,
+// lotDejaOffert, matchActif, onOffrirLot } — ajoute en haut à droite la
+// bulle "vendu …" et le trophée pour offrir un lot (voir Vente.jsx).
+export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFermer, outilsPalet }) {
   // La touche/geste "retour" du téléphone referme cette modale au lieu de
   // faire quitter l'application.
   useFermetureRetour(true, onFermer)
@@ -52,7 +57,29 @@ export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFer
   return (
     <div className="fond-modale" onClick={onFermer}>
       <div className="modale modale-produit" onClick={(e) => e.stopPropagation()}>
-        <h2>{produit.nom}</h2>
+        <div className="entete-produit">
+          <h2>{produit.nom}</h2>
+          {outilsPalet && (
+            <div className="outils-palet">
+              <span className="badge-vendu-match">vendu {outilsPalet.nombreVendu}</span>
+              <button
+                type="button"
+                className="bouton-trophee"
+                disabled={!outilsPalet.matchActif || outilsPalet.lotDejaOffert}
+                title={
+                  !outilsPalet.matchActif
+                    ? 'Démarre un match pour pouvoir offrir un lot'
+                    : outilsPalet.lotDejaOffert
+                    ? 'Un lot a déjà été offert pour ce match'
+                    : 'Offrir un lot (jeu du palet)'
+                }
+                onClick={outilsPalet.onOffrirLot}
+              >
+                🏆
+              </button>
+            </div>
+          )}
+        </div>
         <p style={{ color: 'var(--texte-clair)' }}>
           {formatEuros(produit.prix)} / unité
         </p>
