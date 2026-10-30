@@ -8,7 +8,6 @@ import {
   photosProduit,
   stockTotalProduit,
   comparerTailles,
-  resumeMatch,
 } from '../constants.js'
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
@@ -77,6 +76,7 @@ export default function Vente({ benevole, jeuPaletMode, gourdeActif }) {
   const [lotPaletOuvert, setLotPaletOuvert] = useState(false)
   const [enregistrementLot, setEnregistrementLot] = useState(false)
   const [erreurLot, setErreurLot] = useState(null)
+  const [avertissementLot, setAvertissementLot] = useState(null)
   const [succesLot, setSuccesLot] = useState(null)
 
   useFermetureRetour(!!succes, () => setSucces(null))
@@ -146,20 +146,22 @@ export default function Vente({ benevole, jeuPaletMode, gourdeActif }) {
   const estResponsable = benevole.role === 'responsable'
 
   // Produit « Jeux du palet » tel que chargé dans le catalogue (sert à la
-  // fois au trophée/badge et à la requête de comptage par match).
+  // fois au trophée/badge et à la requête de comptage du jour).
   const produitPalet = useMemo(() => produits.find(estProduitPalet) || null, [produits])
 
-  // Nombre de palets vendus sur le match en cours et éligibilité au
-  // trophée (responsables uniquement, et seulement si un match est en
-  // cours — pas de sens à "une fois par match" sans match actif).
+  // Nombre de palets vendus aujourd'hui et indicateur « déjà offert
+  // aujourd'hui » (responsables uniquement). Sciemment indépendant de la
+  // fiche match : sur le terrain, les responsables n'en créent quasiment
+  // jamais, donc le trophée resterait inutilisable si on exigeait un match
+  // en cours — voir offrir_lot_palet côté SQL, qui raisonne lui aussi en
+  // jour calendaire plutôt qu'en match.
   const chargerEtatPalet = useCallback(async () => {
-    if (!estResponsable || !matchCourant || !produitPalet) {
+    if (!estResponsable || !produitPalet) {
       setEtatPalet({ nombreVendu: 0, lotDejaOffert: false })
       return
     }
     const { data, error } = await supabase.rpc('etat_jeu_palet_match', {
       p_benevole_id: benevole.id,
-      p_match_id: matchCourant.id,
       p_produit_id: produitPalet.id,
     })
     if (!error) {
@@ -169,7 +171,7 @@ export default function Vente({ benevole, jeuPaletMode, gourdeActif }) {
         lotDejaOffert: !!r?.lot_deja_offert,
       })
     }
-  }, [benevole.id, estResponsable, matchCourant, produitPalet])
+  }, [benevole.id, estResponsable, produitPalet])
 
   useEffect(() => {
     chargerEtatPalet()
@@ -206,35 +208,55 @@ export default function Vente({ benevole, jeuPaletMode, gourdeActif }) {
 
   function ouvrirLotPalet() {
     setErreurLot(null)
+    setAvertissementLot(null)
     setLotPaletOuvert(true)
   }
 
   function fermerLotPalet() {
     if (enregistrementLot) return
     setLotPaletOuvert(false)
+    setAvertissementLot(null)
   }
 
-  async function confirmerLotPalet(articlesChoisis, pin) {
+  // Revient à l'écran de détails (motif/PIN) sans soumettre, après avoir vu
+  // l'avertissement « déjà offert aujourd'hui » — pour corriger le motif ou
+  // simplement changer d'avis.
+  function ignorerAvertissementLot() {
+    setAvertissementLot(null)
+  }
+
+  // forcer = true uniquement quand on rappelle après avoir vu
+  // l'avertissement « déjà offert aujourd'hui » (voir plus bas) : le PIN a
+  // déjà été vérifié par le premier appel, pas besoin de le ressaisir.
+  async function confirmerLotPalet(articlesChoisis, motif, pin, forcer) {
     setEnregistrementLot(true)
     setErreurLot(null)
-    const { error } = await supabase.rpc('offrir_lot_palet', {
+    const { data, error } = await supabase.rpc('offrir_lot_palet', {
       p_benevole_id: benevole.id,
       p_pin: pin,
       p_match_id: matchCourant?.id ?? null,
+      p_motif: motif,
       p_articles: articlesChoisis.map((a) => ({ produit_id: a.produit_id, taille: a.taille })),
+      p_forcer: !!forcer,
     })
     setEnregistrementLot(false)
     if (error) {
       setErreurLot(
         error.message === 'Code PIN incorrect'
           ? 'Code PIN incorrect.'
-          : error.message === 'Un lot a déjà été offert pour ce match'
+          : error.message === 'Indique un motif (match ou évènement)'
           ? error.message
           : "Le lot n'a pas pu être enregistré. Réessaie."
       )
       return
     }
+    const resultat = Array.isArray(data) ? data[0] : data
+    if (resultat?.necessite_confirmation) {
+      setAvertissementLot('Un lot a déjà été offert aujourd’hui.')
+      return
+    }
     setLotPaletOuvert(false)
+    setAvertissementLot(null)
     setSuccesLot({ articles: articlesChoisis })
     chargerProduits()
     chargerEtatPalet()
@@ -245,10 +267,9 @@ export default function Vente({ benevole, jeuPaletMode, gourdeActif }) {
     return {
       nombreVendu: etatPalet.nombreVendu,
       lotDejaOffert: etatPalet.lotDejaOffert,
-      matchActif: !!matchCourant,
       onOffrirLot: ouvrirLotPalet,
     }
-  }, [estResponsable, produitPalet, etatPalet, matchCourant])
+  }, [estResponsable, produitPalet, etatPalet])
 
   function ajouterLigneAuPanier(produit, { taille, quantite }) {
     const variante = (produit.variantes_produit || []).find(
@@ -646,11 +667,12 @@ export default function Vente({ benevole, jeuPaletMode, gourdeActif }) {
         {lotPaletOuvert && (
           <LotPaletModal
             produitsDisponibles={produitsOfframles}
-            matchLabel={matchCourant ? resumeMatch(matchCourant) : null}
             onFermer={fermerLotPalet}
             onValider={confirmerLotPalet}
+            onIgnorerAvertissement={ignorerAvertissementLot}
             enCours={enregistrementLot}
             erreur={erreurLot}
+            avertissement={avertissementLot}
           />
         )}
 
