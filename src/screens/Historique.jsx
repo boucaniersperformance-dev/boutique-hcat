@@ -68,6 +68,12 @@ export default function Historique({ benevole }) {
   const [erreurSuppressionMatch, setErreurSuppressionMatch] = useState(null)
   const [suppressionMatchEnCours, setSuppressionMatchEnCours] = useState(false)
 
+  // Lots offerts au jeu du palet : liste séparée, jamais comptée dans les
+  // totaux CB/Espèces ni dans le rapprochement de caisse ci-dessous.
+  const [lotsOfferts, setLotsOfferts] = useState([])
+  const [chargementLotsOfferts, setChargementLotsOfferts] = useState(true)
+  const [erreurLotsOfferts, setErreurLotsOfferts] = useState(null)
+
   // Totaux par article (et par taille), pour le récapitulatif ajouté à
   // l'export CSV — voir exporterCsv. Ces deux jeux de données se chargent
   // en tâche de fond (ils ne s'affichent nulle part à l'écran, seulement
@@ -113,6 +119,24 @@ export default function Historique({ benevole }) {
   useEffect(() => {
     chargerMatchs()
   }, [chargerMatchs])
+
+  const chargerLotsOfferts = useCallback(async () => {
+    setChargementLotsOfferts(true)
+    setErreurLotsOfferts(null)
+    const { data, error } = await supabase.rpc('lister_lots_palet', {
+      p_benevole_id: benevole.id,
+    })
+    if (error) {
+      setErreurLotsOfferts('Impossible de charger les lots offerts.')
+    } else {
+      setLotsOfferts(data || [])
+    }
+    setChargementLotsOfferts(false)
+  }, [benevole.id])
+
+  useEffect(() => {
+    chargerLotsOfferts()
+  }, [chargerLotsOfferts])
 
   const charger = useCallback(async () => {
     setChargement(true)
@@ -223,6 +247,26 @@ export default function Historique({ benevole }) {
     .filter((v) => v.mode_paiement === 'especes')
     .reduce((s, v) => s + Number(v.total), 0)
   const totalGeneral = totalCB + totalEspeces
+
+  // Un lot = un évènement de don (lister_lots_palet renvoie une ligne par
+  // article offert) : on regroupe par lot_id pour afficher chaque don comme
+  // une seule entrée, articles séparés par des points.
+  const lotsGroupes = useMemo(() => {
+    const groupes = new Map()
+    for (const l of lotsOfferts) {
+      if (!groupes.has(l.lot_id)) {
+        groupes.set(l.lot_id, {
+          lot_id: l.lot_id,
+          cree_le: l.cree_le,
+          benevole_nom: l.benevole_nom,
+          match: { date_match: l.date_match, lieu: l.lieu, adversaire: l.adversaire },
+          articles: [],
+        })
+      }
+      groupes.get(l.lot_id).articles.push({ nom_produit: l.nom_produit, taille: l.taille })
+    }
+    return [...groupes.values()].sort((a, b) => (a.cree_le < b.cree_le ? 1 : -1))
+  }, [lotsOfferts])
 
   // Ventes groupées par jour (le plus récent en premier), pour l'affichage
   // "un jour = une ligne, on clique pour voir le détail".
@@ -606,6 +650,53 @@ export default function Historique({ benevole }) {
                   <tr>
                     <td colSpan={6} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
                       Aucun match clôturé pour l'instant
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="bloc" style={{ marginTop: 32 }}>
+        <h2>🏆 Lots offerts (jeu du palet)</h2>
+        <p style={{ color: 'var(--texte-clair)' }}>
+          Articles donnés en lot au jeu du palet — jamais comptés dans les
+          ventes ni dans les totaux CB/Espèces ci-dessus.
+        </p>
+
+        {chargementLotsOfferts && <p className="chargement">Chargement…</p>}
+        {erreurLotsOfferts && <p className="erreur">{erreurLotsOfferts}</p>}
+
+        {!chargementLotsOfferts && !erreurLotsOfferts && (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tableau-admin">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Match</th>
+                  <th>Bénévole</th>
+                  <th>Articles offerts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lotsGroupes.map((lot) => (
+                  <tr key={lot.lot_id}>
+                    <td>{new Date(lot.cree_le).toLocaleString('fr-FR')}</td>
+                    <td>{resumeMatch(lot.match)}</td>
+                    <td>{lot.benevole_nom}</td>
+                    <td>
+                      {lot.articles
+                        .map((a) => a.nom_produit + (a.taille ? ` (${a.taille})` : ''))
+                        .join(' · ')}
+                    </td>
+                  </tr>
+                ))}
+                {lotsGroupes.length === 0 && (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--texte-clair)' }}>
+                      Aucun lot offert pour l'instant
                     </td>
                   </tr>
                 )}
