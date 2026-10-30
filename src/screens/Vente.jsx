@@ -8,12 +8,14 @@ import {
   photosProduit,
   stockTotalProduit,
   comparerTailles,
+  resumeMatch,
 } from '../constants.js'
 import AjoutModal from '../components/AjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
 import EncartMatch from '../components/EncartMatch.jsx'
 import GourdeCommandeModal from '../components/GourdeCommandeModal.jsx'
 import PaletCommandeModal from '../components/PaletCommandeModal.jsx'
+import LotPaletModal from '../components/LotPaletModal.jsx'
 import { estProduitGourde, trouverPose } from '../components/GourdePerso/poses'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
@@ -68,6 +70,14 @@ export default function Vente({ benevole, jeuPaletMode }) {
   const [tickCarrousel, setTickCarrousel] = useState(0)
   const [matchCourant, setMatchCourant] = useState(null)
   const [journalPaletDuJour, setJournalPaletDuJour] = useState([])
+
+  // Trophée « offrir un lot » + bulle « vendu … » (jeu du palet, réservés
+  // aux responsables) — voir chargerEtatPalet ci-dessous.
+  const [etatPalet, setEtatPalet] = useState({ nombreVendu: 0, lotDejaOffert: false })
+  const [lotPaletOuvert, setLotPaletOuvert] = useState(false)
+  const [enregistrementLot, setEnregistrementLot] = useState(false)
+  const [erreurLot, setErreurLot] = useState(null)
+  const [succesLot, setSuccesLot] = useState(null)
 
   useFermetureRetour(!!succes, () => setSucces(null))
 
@@ -132,6 +142,106 @@ export default function Vente({ benevole, jeuPaletMode }) {
     () => new Set(panier.filter((l) => l.palet).map((l) => l.palet.numero)),
     [panier]
   )
+
+  const estResponsable = benevole.role === 'responsable'
+
+  // Produit « Jeux du palet » tel que chargé dans le catalogue (sert à la
+  // fois au trophée/badge et à la requête de comptage par match).
+  const produitPalet = useMemo(() => produits.find(estProduitPalet) || null, [produits])
+
+  // Nombre de palets vendus sur le match en cours et éligibilité au
+  // trophée (responsables uniquement, et seulement si un match est en
+  // cours — pas de sens à "une fois par match" sans match actif).
+  const chargerEtatPalet = useCallback(async () => {
+    if (!estResponsable || !matchCourant || !produitPalet) {
+      setEtatPalet({ nombreVendu: 0, lotDejaOffert: false })
+      return
+    }
+    const { data, error } = await supabase.rpc('etat_jeu_palet_match', {
+      p_benevole_id: benevole.id,
+      p_match_id: matchCourant.id,
+      p_produit_id: produitPalet.id,
+    })
+    if (!error) {
+      const r = Array.isArray(data) ? data[0] : data
+      setEtatPalet({
+        nombreVendu: Number(r?.nombre_vendu) || 0,
+        lotDejaOffert: !!r?.lot_deja_offert,
+      })
+    }
+  }, [benevole.id, estResponsable, matchCourant, produitPalet])
+
+  useEffect(() => {
+    chargerEtatPalet()
+  }, [chargerEtatPalet])
+
+  // Rafraîchit aussi à l'ouverture de la fiche « Jeux du palet », pour
+  // rester à jour même si une autre tablette vient de vendre un numéro ou
+  // d'offrir un lot entre deux ouvertures.
+  useEffect(() => {
+    if (produitOuvert && estProduitPalet(produitOuvert)) chargerEtatPalet()
+  }, [produitOuvert, chargerEtatPalet])
+
+  useEffect(() => {
+    if (paletOuvert) chargerEtatPalet()
+  }, [paletOuvert, chargerEtatPalet])
+
+  // Articles pouvant être offerts en lot : le catalogue en stock, hors
+  // « Jeux du palet » lui-même (ça n'aurait pas de sens de l'offrir).
+  const produitsOfframles = useMemo(
+    () =>
+      produits
+        .filter((p) => produitEnStock(p) && !estProduitPalet(p))
+        .slice()
+        .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })),
+    [produits]
+  )
+
+  function ouvrirLotPalet() {
+    setErreurLot(null)
+    setLotPaletOuvert(true)
+  }
+
+  function fermerLotPalet() {
+    if (enregistrementLot) return
+    setLotPaletOuvert(false)
+  }
+
+  async function confirmerLotPalet(articlesChoisis, pin) {
+    setEnregistrementLot(true)
+    setErreurLot(null)
+    const { error } = await supabase.rpc('offrir_lot_palet', {
+      p_benevole_id: benevole.id,
+      p_pin: pin,
+      p_match_id: matchCourant?.id ?? null,
+      p_articles: articlesChoisis.map((a) => ({ produit_id: a.produit_id, taille: a.taille })),
+    })
+    setEnregistrementLot(false)
+    if (error) {
+      setErreurLot(
+        error.message === 'Code PIN incorrect'
+          ? 'Code PIN incorrect.'
+          : error.message === 'Un lot a déjà été offert pour ce match'
+          ? error.message
+          : "Le lot n'a pas pu être enregistré. Réessaie."
+      )
+      return
+    }
+    setLotPaletOuvert(false)
+    setSuccesLot({ articles: articlesChoisis })
+    chargerProduits()
+    chargerEtatPalet()
+  }
+
+  const outilsPaletEntete = useMemo(() => {
+    if (!estResponsable || !produitPalet) return null
+    return {
+      nombreVendu: etatPalet.nombreVendu,
+      lotDejaOffert: etatPalet.lotDejaOffert,
+      matchActif: !!matchCourant,
+      onOffrirLot: ouvrirLotPalet,
+    }
+  }, [estResponsable, produitPalet, etatPalet, matchCourant])
 
   function ajouterLigneAuPanier(produit, { taille, quantite }) {
     const variante = (produit.variantes_produit || []).find(
@@ -306,6 +416,7 @@ export default function Vente({ benevole, jeuPaletMode }) {
     setPanier([])
     chargerProduits()
     chargerJournalPalet()
+    chargerEtatPalet()
   }
 
   const comptesParCategorie = useMemo(() => {
@@ -491,6 +602,7 @@ export default function Vente({ benevole, jeuPaletMode }) {
             onFermer={() => setProduitOuvert(null)}
             onValider={(choix) => ajouterAuPanier(produitOuvert, choix)}
             onValiderEtPayer={(choix) => ajouterEtPayer(produitOuvert, choix)}
+            outilsPalet={estProduitPalet(produitOuvert) ? outilsPaletEntete : null}
           />
         )}
 
@@ -511,6 +623,18 @@ export default function Vente({ benevole, jeuPaletMode }) {
             onFermer={() => setPaletOuvert(null)}
             onValider={(details) => ajouterCommandePalet(paletOuvert, details, false)}
             onValiderEtPayer={(details) => ajouterCommandePalet(paletOuvert, details, true)}
+            outilsPalet={outilsPaletEntete}
+          />
+        )}
+
+        {lotPaletOuvert && (
+          <LotPaletModal
+            produitsDisponibles={produitsOfframles}
+            matchLabel={matchCourant ? resumeMatch(matchCourant) : null}
+            onFermer={fermerLotPalet}
+            onValider={confirmerLotPalet}
+            enCours={enregistrementLot}
+            erreur={erreurLot}
           />
         )}
 
@@ -580,6 +704,28 @@ export default function Vente({ benevole, jeuPaletMode }) {
                 )}
                 <button className="bouton-principal" onClick={() => setSucces(null)}>
                   Nouvelle vente
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {succesLot && (
+          <div className="fond-modale" onClick={() => setSuccesLot(null)}>
+            <div className="modale" onClick={(e) => e.stopPropagation()}>
+              <div className="succes-ecran">
+                <div className="succes-icone">🏆</div>
+                <h2>Lot offert</h2>
+                <p>
+                  {succesLot.articles
+                    .map((a) => a.nom + (a.taille ? ` (${a.taille})` : ''))
+                    .join(' · ')}
+                </p>
+                <p style={{ color: 'var(--texte-clair)' }}>
+                  Stock mis à jour. Un seul lot est possible par match.
+                </p>
+                <button className="bouton-principal" onClick={() => setSuccesLot(null)}>
+                  Fermer
                 </button>
               </div>
             </div>
