@@ -1543,6 +1543,107 @@ table.tableau-admin .panneau-edition input[type="text"] {
   cursor: not-allowed;
 }
 
+/* ---------- Jeux du palet : trophée (offrir un lot) et bulle "vendu …" --- */
+
+/* En-tête des modales d'article (AjoutModal / PaletCommandeModal) : le nom
+   à gauche, les outils "Jeux du palet" (responsables uniquement) à droite,
+   comme dessiné par l'utilisateur sur la fiche article. */
+.entete-produit {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.entete-produit h2 {
+  margin-bottom: 0;
+}
+
+.outils-palet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.badge-vendu-match {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: var(--bleu);
+  color: white;
+}
+
+.bouton-trophee {
+  background: var(--fond);
+  border: 2px solid var(--bordure);
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 1.1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.bouton-trophee:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Choix des articles à offrir en lot (LotPaletModal) */
+
+.grille-choix-lot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.carte-choix-lot {
+  border: 2px solid var(--bordure);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.carte-choix-lot-bouton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0;
+}
+
+.carte-choix-lot-prix {
+  color: var(--texte-clair);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.carte-choix-lot.selectionne {
+  border-color: var(--bleu);
+  background: #eef3f9;
+}
+
+.carte-choix-lot .choix-tailles {
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  margin: 10px 0 0;
+}
+
 /* ---------- Suivi des commandes : filtres, numéro cliquable, détail ---------- */
 
 .filtres-segments {
