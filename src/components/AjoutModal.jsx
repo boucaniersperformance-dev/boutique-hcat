@@ -6,8 +6,8 @@ import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 //
 // outilsPalet (optionnel) : uniquement pour l'article « Jeux du palet », et
 // seulement affiché par l'appelant aux responsables — { nombreVendu,
-// lotDejaOffert, matchActif, onOffrirLot } — ajoute en haut à droite la
-// bulle "vendu …" et le trophée pour offrir un lot (voir Vente.jsx).
+// lotDejaOffert, onOffrirLot } — ajoute en haut à droite la bulle "vendu …"
+// et le trophée pour offrir un lot (voir Vente.jsx).
 export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFermer, outilsPalet }) {
   // La touche/geste "retour" du téléphone referme cette modale au lieu de
   // faire quitter l'application.
@@ -65,12 +65,9 @@ export default function AjoutModal({ produit, onValider, onValiderEtPayer, onFer
               <button
                 type="button"
                 className="bouton-trophee"
-                disabled={!outilsPalet.matchActif || outilsPalet.lotDejaOffert}
                 title={
-                  !outilsPalet.matchActif
-                    ? 'Démarre un match pour pouvoir offrir un lot'
-                    : outilsPalet.lotDejaOffert
-                    ? 'Un lot a déjà été offert pour ce match'
+                  outilsPalet.lotDejaOffert
+                    ? 'Un lot a déjà été offert aujourd’hui — offrir un autre lot'
                     : 'Offrir un lot (jeu du palet)'
                 }
                 onClick={outilsPalet.onOffrirLot}
