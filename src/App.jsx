@@ -32,6 +32,13 @@ export default function App() {
   // savoir si elle est vraiment activée.
   const [jeuPaletMode, setJeuPaletMode] = useState('desactive')
 
+  // Réglage modifiable depuis l'onglet Produits (rubrique "Gourde
+  // personnalisée") — projet pas encore validé par le staff du club, donc
+  // masqué par défaut (comme jeuPaletMode) tant que la vraie valeur n'a pas
+  // été chargée : onglet « Gourde » masqué et article « Custom Gourde »
+  // retiré de la grille de la page Vente.
+  const [gourdeActif, setGourdeActif] = useState(false)
+
   // Connexion Google : le temps de vérifier l'adresse (après retour de
   // Google) et le message d'erreur si elle n'est pas autorisée.
   const [verificationGoogle, setVerificationGoogle] = useState(false)
@@ -155,12 +162,13 @@ export default function App() {
     let annule = false
     supabase
       .from('parametres_boutique')
-      .select('jeu_palet_mode')
+      .select('jeu_palet_mode, gourde_active')
       .eq('id', 1)
       .single()
       .then(({ data, error }) => {
         if (annule || error || !data) return
         setJeuPaletMode(data.jeu_palet_mode)
+        setGourdeActif(!!data.gourde_active)
       })
     return () => {
       annule = true
@@ -230,6 +238,12 @@ export default function App() {
   useEffect(() => {
     if (jeuPaletMode === 'desactive' && ecran === 'palet') setEcran('vente')
   }, [jeuPaletMode, ecran])
+
+  // Même principe si « Gourde » est désactivé pendant qu'un bénévole se
+  // trouve sur cet écran.
+  useEffect(() => {
+    if (!gourdeActif && ecran === 'gourde') setEcran('vente')
+  }, [gourdeActif, ecran])
 
   // Si un responsable se déconnecte (ou perd son statut) pendant qu'il se
   // trouve sur un écran réservé aux responsables, on le ramène sur l'écran
@@ -354,12 +368,14 @@ export default function App() {
               Jeux du palet
             </button>
           )}
-          <button
-            className={ecran === 'gourde' ? 'actif' : ''}
-            onClick={() => setEcran('gourde')}
-          >
-            Gourde
-          </button>
+          {gourdeActif && (
+            <button
+              className={ecran === 'gourde' ? 'actif' : ''}
+              onClick={() => setEcran('gourde')}
+            >
+              Gourde
+            </button>
+          )}
           <button
             className={`bouton-avec-badge ${ecran === 'commande' ? 'actif' : ''}`}
             onClick={() => setEcran('commande')}
@@ -418,15 +434,19 @@ export default function App() {
       </header>
 
       <main className="contenu">
-        {ecran === 'vente' && <Vente benevole={benevole} jeuPaletMode={jeuPaletMode} />}
+        {ecran === 'vente' && (
+          <Vente benevole={benevole} jeuPaletMode={jeuPaletMode} gourdeActif={gourdeActif} />
+        )}
         {ecran === 'palet' && jeuPaletMode !== 'desactive' && <JeuPalet benevole={benevole} />}
-        {ecran === 'gourde' && <GourdePerso benevole={benevole} />}
+        {ecran === 'gourde' && gourdeActif && <GourdePerso benevole={benevole} />}
         {ecran === 'commande' && <Commande benevole={benevole} />}
         {ecran === 'produits' && estResponsable && (
           <AdminProduits
             benevole={benevole}
             jeuPaletMode={jeuPaletMode}
             onChangerJeuPaletMode={setJeuPaletMode}
+            gourdeActif={gourdeActif}
+            onChangerGourdeActif={setGourdeActif}
           />
         )}
         {ecran === 'benevoles' && estResponsable && (
