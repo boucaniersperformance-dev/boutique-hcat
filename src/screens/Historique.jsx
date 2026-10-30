@@ -259,7 +259,7 @@ export default function Historique({ benevole }) {
           lot_id: l.lot_id,
           cree_le: l.cree_le,
           benevole_nom: l.benevole_nom,
-          match: { date_match: l.date_match, lieu: l.lieu, adversaire: l.adversaire },
+          motif: l.motif,
           articles: [],
         })
       }
@@ -675,7 +675,7 @@ export default function Historique({ benevole }) {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Match</th>
+                  <th>Motif</th>
                   <th>Bénévole</th>
                   <th>Articles offerts</th>
                 </tr>
@@ -684,7 +684,7 @@ export default function Historique({ benevole }) {
                 {lotsGroupes.map((lot) => (
                   <tr key={lot.lot_id}>
                     <td>{new Date(lot.cree_le).toLocaleString('fr-FR')}</td>
-                    <td>{resumeMatch(lot.match)}</td>
+                    <td>{lot.motif}</td>
                     <td>{lot.benevole_nom}</td>
                     <td>
                       {lot.articles
