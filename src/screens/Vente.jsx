@@ -52,7 +52,7 @@ function taillesDisponibles(produit) {
 
 const INTERVALLE_CARROUSEL_MS = 3000
 
-export default function Vente({ benevole, jeuPaletMode }) {
+export default function Vente({ benevole, jeuPaletMode, gourdeActif }) {
   const [produits, setProduits] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
@@ -187,14 +187,21 @@ export default function Vente({ benevole, jeuPaletMode }) {
   }, [paletOuvert, chargerEtatPalet])
 
   // Articles pouvant être offerts en lot : le catalogue en stock, hors
-  // « Jeux du palet » lui-même (ça n'aurait pas de sens de l'offrir).
+  // « Jeux du palet » lui-même (ça n'aurait pas de sens de l'offrir), et
+  // hors « Custom Gourde » tant que ce n'est pas activé (même logique que
+  // la grille de vente, voir produitVisibleEnVente plus bas).
   const produitsOfframles = useMemo(
     () =>
       produits
-        .filter((p) => produitEnStock(p) && !estProduitPalet(p))
+        .filter(
+          (p) =>
+            produitEnStock(p) &&
+            !estProduitPalet(p) &&
+            (gourdeActif || !estProduitGourde(p))
+        )
         .slice()
         .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })),
-    [produits]
+    [produits, gourdeActif]
   )
 
   function ouvrirLotPalet() {
@@ -419,13 +426,22 @@ export default function Vente({ benevole, jeuPaletMode }) {
     chargerEtatPalet()
   }
 
+  // « Custom Gourde » est un projet pas encore validé par le staff : tant
+  // que gourdeActif est désactivé (réglage de l'onglet Produits), l'article
+  // disparaît entièrement de la grille de vente — ni achat simple, ni
+  // personnalisé — comme s'il n'existait pas.
+  const produitVisibleEnVente = useCallback(
+    (p) => produitEnStock(p) && (gourdeActif || !estProduitGourde(p)),
+    [gourdeActif]
+  )
+
   const comptesParCategorie = useMemo(() => {
     const compte = { adulte: 0, enfant: 0, goodies: 0 }
-    produits.filter(produitEnStock).forEach((p) => {
+    produits.filter(produitVisibleEnVente).forEach((p) => {
       compte[categorieProduit(p)] += 1
     })
     return compte
-  }, [produits])
+  }, [produits, produitVisibleEnVente])
 
   // Ordre d'affichage voulu dans la grille de vente, toujours respecté
   // automatiquement (y compris après un changement de stock ou de mise en
@@ -437,13 +453,13 @@ export default function Vente({ benevole, jeuPaletMode }) {
   const produitsAffiches = useMemo(
     () =>
       produits
-        .filter((p) => produitEnStock(p) && categoriesActives[categorieProduit(p)])
+        .filter((p) => produitVisibleEnVente(p) && categoriesActives[categorieProduit(p)])
         .slice()
         .sort(
           (a, b) =>
             ORDRE_CATEGORIES[categorieProduit(a)] - ORDRE_CATEGORIES[categorieProduit(b)]
         ),
-    [produits, categoriesActives]
+    [produits, categoriesActives, produitVisibleEnVente]
   )
 
   function basculerCategorie(cle) {
