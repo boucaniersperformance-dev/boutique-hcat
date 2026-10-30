@@ -7,6 +7,15 @@ import {
   photosProduit,
 } from '../constants.js'
 import CommandeAjoutModal from '../components/CommandeAjoutModal.jsx'
+import { estProduitGourde } from '../components/GourdePerso/poses.js'
+
+// Même règle de détection que l'écran Vente (voir estProduitGourde dans
+// GourdePerso/poses.js pour la gourde) : simple comparaison sur le nom,
+// insensible à la casse.
+const NOM_PRODUIT_PALET = 'Jeux du palet'
+function estProduitPalet(produit) {
+  return (produit?.nom || '').trim().toLowerCase() === NOM_PRODUIT_PALET.toLowerCase()
+}
 
 function telephoneValide(t) {
   return String(t || '').replace(/\D/g, '').length >= 10
@@ -64,6 +73,29 @@ export default function CommandePublique() {
   )
   const [recherche, setRecherche] = useState('')
 
+  // Réglage « Gourde personnalisée » (onglet Produits, même source que le
+  // reste de l'appli) : projet pas encore validé par le staff, donc on
+  // part du principe qu'il est désactivé tant que la vraie valeur n'a pas
+  // été chargée, pour ne jamais proposer l'article par erreur.
+  const [gourdeActif, setGourdeActif] = useState(false)
+
+  useEffect(() => {
+    if (!pret) return
+    let annule = false
+    supabase
+      .from('parametres_boutique')
+      .select('gourde_active')
+      .eq('id', 1)
+      .single()
+      .then(({ data, error }) => {
+        if (annule || error || !data) return
+        setGourdeActif(!!data.gourde_active)
+      })
+    return () => {
+      annule = true
+    }
+  }, [pret])
+
   const chargerProduits = useCallback(async () => {
     setErreurProduits(null)
     const { data, error } = await supabase
@@ -87,11 +119,20 @@ export default function CommandePublique() {
   const produitsAffiches = useMemo(() => {
     const texte = recherche.trim().toLowerCase()
     return produits
+      // « Jeux du palet » se joue en personne, au comptoir, avec un numéro
+      // choisi sur place : ça n'a pas de sens de le précommander ici, donc
+      // il est toujours retiré du catalogue de cette page publique, quel
+      // que soit le réglage dans l'onglet Produits.
+      .filter((p) => !estProduitPalet(p))
+      // « Custom Gourde » suit le même réglage que partout ailleurs dans
+      // l'appli (onglet Produits) : retiré du catalogue tant qu'il n'est
+      // pas activé.
+      .filter((p) => gourdeActif || !estProduitGourde(p))
       .filter((p) => categoriesActives[categorieProduit(p)])
       .filter((p) => !texte || p.nom.toLowerCase().includes(texte))
       .slice()
       .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))
-  }, [produits, categoriesActives, recherche])
+  }, [produits, categoriesActives, recherche, gourdeActif])
 
   function basculerCategorie(cle) {
     setCategoriesActives((etat) => ({ ...etat, [cle]: !etat[cle] }))
