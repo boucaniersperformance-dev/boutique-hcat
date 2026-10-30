@@ -21,9 +21,16 @@ const BUCKET_PHOTOS = 'produits-photos'
 const TAILLES_ENFANT_AGE_PRECIS = ['6 ans', '8 ans', '10 ans', '12 ans']
 const TAILLES_ENFANT_PLAGE_AGE = ['3-4 ans', '5-6 ans', '7-8 ans', '9-11 ans', '12-13 ans']
 
-export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPaletMode }) {
+export default function AdminProduits({
+  benevole,
+  jeuPaletMode,
+  onChangerJeuPaletMode,
+  gourdeActif,
+  onChangerGourdeActif,
+}) {
   const [produits, setProduits] = useState([])
   const [modePaletEnCours, setModePaletEnCours] = useState(false)
+  const [gourdeActifEnCours, setGourdeActifEnCours] = useState(false)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [messages, setMessages] = useState({})
@@ -122,6 +129,24 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
       return
     }
     onChangerJeuPaletMode(nouveauMode)
+  }
+
+  // Change le réglage « Gourde personnalisée » (voir le bloc ci-dessous) —
+  // même principe que changerModeJeuPalet : répercuté tout de suite dans
+  // App.jsx via onChangerGourdeActif.
+  async function changerGourdeActif(nouvelActif) {
+    if (nouvelActif === gourdeActif || gourdeActifEnCours) return
+    setGourdeActifEnCours(true)
+    const { error } = await supabase.rpc('definir_gourde_actif', {
+      p_benevole_id: benevole.id,
+      p_actif: nouvelActif,
+    })
+    setGourdeActifEnCours(false)
+    if (error) {
+      window.alert('Erreur lors du changement de réglage. Réessaie.')
+      return
+    }
+    onChangerGourdeActif(nouvelActif)
   }
 
   function parNomAlphabetique(a, b) {
@@ -1565,6 +1590,65 @@ export default function AdminProduits({ benevole, jeuPaletMode, onChangerJeuPale
           ))}
         </div>
         {modePaletEnCours && (
+          <p style={{ color: 'var(--texte-clair)', marginTop: 10 }}>Enregistrement…</p>
+        )}
+      </div>
+
+      <div className="bloc">
+        <h2>Gourde personnalisée</h2>
+        <p style={{ color: 'var(--texte-clair)' }}>
+          Détermine si « Custom Gourde » est proposé. Projet pas encore
+          validé par le staff : laisse sur « Désactivée » tant que ce n'est
+          pas tranché — rien n'est perdu, il suffit de réactiver ici le jour
+          venu.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 640 }}>
+          {[
+            {
+              valeur: false,
+              titre: 'Désactivée',
+              description:
+                "L'onglet « Gourde » est masqué, et « Custom Gourde » disparaît entièrement de la grille d'articles de la page Vente.",
+            },
+            {
+              valeur: true,
+              titre: 'Activée',
+              description:
+                "L'onglet « Gourde » revient, et « Custom Gourde » redevient achetable en page Vente avec son formulaire de personnalisation (prénom, numéro, pose, stickers).",
+            },
+          ].map((option) => (
+            <label
+              key={String(option.valeur)}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                padding: '10px 14px',
+                borderRadius: 10,
+                border: '1px solid var(--bordure)',
+                background: 'var(--fond)',
+                cursor: gourdeActifEnCours ? 'default' : 'pointer',
+              }}
+            >
+              <input
+                type="radio"
+                name="gourde-active"
+                style={{ width: 18, height: 18, flexShrink: 0, marginTop: 2 }}
+                checked={gourdeActif === option.valeur}
+                disabled={gourdeActifEnCours}
+                onChange={() => changerGourdeActif(option.valeur)}
+              />
+              <span>
+                <b>{option.titre}</b>
+                <br />
+                <span style={{ color: 'var(--texte-clair)', fontSize: '0.85rem' }}>
+                  {option.description}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {gourdeActifEnCours && (
           <p style={{ color: 'var(--texte-clair)', marginTop: 10 }}>Enregistrement…</p>
         )}
       </div>
