@@ -20,6 +20,7 @@ export default function PaletCommandeModal({
   onValider,
   onValiderEtPayer,
   onFermer,
+  outilsPalet,
 }) {
   useFermetureRetour(true, onFermer)
   const [numero, setNumero] = useState('')
@@ -44,7 +45,29 @@ export default function PaletCommandeModal({
   return (
     <div className="fond-modale" onClick={onFermer}>
       <div className="modale modale-large" onClick={(e) => e.stopPropagation()}>
-        <h2>{produit.nom}</h2>
+        <div className="entete-produit">
+          <h2>{produit.nom}</h2>
+          {outilsPalet && (
+            <div className="outils-palet">
+              <span className="badge-vendu-match">vendu {outilsPalet.nombreVendu}</span>
+              <button
+                type="button"
+                className="bouton-trophee"
+                disabled={!outilsPalet.matchActif || outilsPalet.lotDejaOffert}
+                title={
+                  !outilsPalet.matchActif
+                    ? 'Démarre un match pour pouvoir offrir un lot'
+                    : outilsPalet.lotDejaOffert
+                    ? 'Un lot a déjà été offert pour ce match'
+                    : 'Offrir un lot (jeu du palet)'
+                }
+                onClick={outilsPalet.onOffrirLot}
+              >
+                🏆
+              </button>
+            </div>
+          )}
+        </div>
         <p style={{ color: 'var(--texte-clair)' }}>
           {formatEuros(produit.prix)} le numéro, de 00 à {deuxChiffres(NUMERO_PALET_MAX)}.
         </p>
