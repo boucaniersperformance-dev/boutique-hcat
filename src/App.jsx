@@ -10,12 +10,19 @@ import Historique from './screens/Historique.jsx'
 import JeuPalet from './screens/JeuPalet.jsx'
 import CaisseEspeces from './screens/CaisseEspeces.jsx'
 import GourdePerso from './components/GourdePerso/GourdePerso.jsx'
+import IntroVideo from './components/IntroVideo.jsx'
 
 const CLE_SESSION = 'boutique-hcat-session'
 
 export default function App() {
   const [pret, setPret] = useState(false)
   const [erreurConnexion, setErreurConnexion] = useState(null)
+
+  // Vidéo d'intro affichée à chaque ouverture du site (une au hasard
+  // parmi trois) — voir IntroVideo.jsx. Se referme toute seule, puis
+  // l'appli continue normalement (le chargement en arrière-plan n'est pas
+  // retardé par la vidéo, les effets ci-dessous tournent déjà).
+  const [introVisible, setIntroVisible] = useState(true)
   const [benevole, setBenevole] = useState(() => {
     try {
       const brut = sessionStorage.getItem(CLE_SESSION)
@@ -257,6 +264,10 @@ export default function App() {
       setEcran('vente')
     }
   }, [benevole, ecran])
+
+  if (introVisible) {
+    return <IntroVideo onTerminer={() => setIntroVisible(false)} />
+  }
 
   if (erreurConnexion) {
     return (
