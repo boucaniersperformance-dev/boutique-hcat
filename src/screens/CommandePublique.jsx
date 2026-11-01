@@ -7,6 +7,7 @@ import {
   photosProduit,
 } from '../constants.js'
 import CommandeAjoutModal from '../components/CommandeAjoutModal.jsx'
+import IntroVideo from '../components/IntroVideo.jsx'
 import { estProduitGourde } from '../components/GourdePerso/poses.js'
 
 // Même règle de détection que l'écran Vente (voir estProduitGourde dans
@@ -52,6 +53,11 @@ export default function CommandePublique() {
   // pour le reste de l'appli), pas besoin d'identification.
   const [pret, setPret] = useState(false)
   const [erreurSession, setErreurSession] = useState(null)
+
+  // Vidéo d'intro affichée à chaque ouverture de cette page (une au
+  // hasard parmi trois) — voir IntroVideo.jsx. Le chargement du
+  // catalogue continue en arrière-plan pendant qu'elle joue.
+  const [introVisible, setIntroVisible] = useState(true)
 
   useEffect(() => {
     ensureSupabaseSession()
@@ -308,6 +314,10 @@ export default function CommandePublique() {
     setMessageSuccesAnnulation(
       'Demande transmise ✓ — un(e) responsable du club va l\'examiner.'
     )
+  }
+
+  if (introVisible) {
+    return <IntroVideo onTerminer={() => setIntroVisible(false)} />
   }
 
   if (erreurSession) {
