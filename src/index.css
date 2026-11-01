@@ -1728,3 +1728,41 @@ table.tableau-admin .panneau-edition input[type="text"] {
   padding-top: 12px;
   border-top: 1px solid var(--bordure);
 }
+
+/* ---------------------------------------------------------------------
+   Vidéo d'intro (à l'ouverture du site — appli bénévole et commande
+   publique) : plein écran, une vidéo au hasard parmi trois, fermeture
+   automatique à la fin ou au premier contact.
+--------------------------------------------------------------------- */
+.intro-video-fond {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: linear-gradient(160deg, var(--bleu), #0b1526);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.intro-video-fond.disparait {
+  opacity: 0;
+}
+
+.intro-video {
+  width: min(85vw, 85vh, 520px);
+  aspect-ratio: 1 / 1;
+  border-radius: 20px;
+  object-fit: cover;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+.intro-video-passer {
+  margin-top: 18px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
