@@ -359,9 +359,18 @@ export default function CommandePublique() {
               lineHeight: 1.5,
             }}
           >
-            <li>Paiement uniquement à la récupération de l'article (jamais en ligne).</li>
-            <li>Aucune livraison : l'article se récupère toujours lors d'un match des Boucaniers.</li>
-            <li>Pas de délai précis de réception — on te recontactera dès qu'il est disponible.</li>
+            <li>
+              <strong style={{ color: 'var(--bleu)' }}>Paiement uniquement à la récupération</strong>{' '}
+              de l'article (jamais en ligne).
+            </li>
+            <li>
+              <strong style={{ color: 'var(--bleu)' }}>Aucune livraison</strong> : l'article se
+              récupère <strong style={{ color: 'var(--bleu)' }}>toujours lors d'un match des Boucaniers</strong>.
+            </li>
+            <li>
+              <strong style={{ color: 'var(--bleu)' }}>Pas de délai précis de réception</strong> —
+              on te recontactera dès qu'il est disponible.
+            </li>
           </ul>
 
           <div
