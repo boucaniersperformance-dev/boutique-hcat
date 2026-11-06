@@ -346,11 +346,23 @@ export default function CommandePublique() {
 
       <main className="contenu">
         <div className="bloc">
-          <p style={{ color: 'var(--texte-clair)' }}>
+          <p style={{ color: 'var(--texte-clair)', marginBottom: 8 }}>
             Pour un article qui n'est pas disponible tout de suite (taille
             épuisée, article pas sorti à ce match…) : note ta demande
             ci-dessous, un(e) responsable du club te recontactera.
           </p>
+          <ul
+            style={{
+              color: 'var(--texte-clair)',
+              margin: '0 0 16px',
+              paddingLeft: 20,
+              lineHeight: 1.5,
+            }}
+          >
+            <li>Paiement uniquement à la récupération de l'article (jamais en ligne).</li>
+            <li>Aucune livraison : l'article se récupère toujours lors d'un match des Boucaniers.</li>
+            <li>Pas de délai précis de réception — on te recontactera dès qu'il est disponible.</li>
+          </ul>
 
           <div
             style={{
