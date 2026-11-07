@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // Capture l'invite d'installation PWA le plus tôt possible — avant
+      // même que l'appli React ne soit montée. Chrome peut déclencher
+      // beforeinstallprompt dès qu'il juge la page installable, parfois
+      // avant que nos composants aient eu le temps de s'y abonner (par
+      // exemple pendant que la vidéo d'intro joue) ; sans cette capture
+      // précoce, l'événement serait manqué et notre bouton « Installer »
+      // n'apparaîtrait jamais.
+      window.__hcatInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__hcatInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('hcat-install-prompt-ready'));
+      });
+    </script>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!--
+      Manifeste propre à cette page (start_url et scope = /commande-client),
+      écrit en dur dans le HTML — contrairement à l'ancienne version qui le
+      changeait en JavaScript après coup. Chrome/Android détermine
+      l'installabilité d'une page très tôt, parfois avant qu'un script ait
+      pu modifier ce lien : l'avoir directement dans le HTML servi est la
+      seule méthode fiable pour que « Installer » fonctionne à tous les
+      coups, sur tous les navigateurs.
+    -->
+    <link rel="manifest" href="/manifest-commande.webmanifest" />
+    <meta name="theme-color" content="#1d3557" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Boucaniers — Commander & suivre</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main-commande.jsx"></script>
+  </body>
+</html>
