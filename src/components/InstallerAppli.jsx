@@ -58,6 +58,14 @@ export default function InstallerAppli() {
     setIos(estIOS())
     setMasquee(false)
 
+    // L'invite a pu être capturée avant même le montage de ce composant
+    // (voir le script dans index.html, nécessaire car Chrome peut la
+    // déclencher très tôt, par exemple pendant la vidéo d'intro) : on la
+    // récupère tout de suite si elle est déjà disponible.
+    if (window.__hcatInstallPrompt) {
+      setEventInstallation(window.__hcatInstallPrompt)
+    }
+
     function surInvite(evenement) {
       // Empêche la mini-infobar automatique du navigateur : on affiche
       // notre propre bouton, déclenché au moment choisi par le client.
@@ -65,14 +73,19 @@ export default function InstallerAppli() {
       setEventInstallation(evenement)
       setMasquee(false)
     }
+    function surInvitePrecoce() {
+      if (window.__hcatInstallPrompt) setEventInstallation(window.__hcatInstallPrompt)
+    }
     function surInstallee() {
       setMasquee(true)
       ecrire(CLE_MASQUE, '1')
     }
 
     window.addEventListener('beforeinstallprompt', surInvite)
+    window.addEventListener('hcat-install-prompt-ready', surInvitePrecoce)
     window.addEventListener('appinstalled', surInstallee)
     return () => {
+      window.removeEventListener('hcat-install-prompt-ready', surInvitePrecoce)
       window.removeEventListener('beforeinstallprompt', surInvite)
       window.removeEventListener('appinstalled', surInstallee)
     }
