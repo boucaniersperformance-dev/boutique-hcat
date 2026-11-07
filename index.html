@@ -2,6 +2,21 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Capture l'invite d'installation PWA le plus tôt possible — avant
+      // même que l'appli React ne soit montée. Chrome peut déclencher
+      // beforeinstallprompt dès qu'il juge la page installable, parfois
+      // avant que nos composants aient eu le temps de s'y abonner (par
+      // exemple pendant que la vidéo d'intro joue) ; sans cette capture
+      // précoce, l'événement serait manqué et notre bouton « Installer »
+      // n'apparaîtrait jamais.
+      window.__hcatInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__hcatInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('hcat-install-prompt-ready'));
+      });
+    </script>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
