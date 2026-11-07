@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/commande-client", "destination": "/commande-client.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
