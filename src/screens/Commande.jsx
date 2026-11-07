@@ -22,13 +22,24 @@ function cleLigne(produitId, taille) {
   return `${produitId}__${taille || ''}`
 }
 
+// Texte d'une ligne de commande ("T-shirt (M) ×2").
+function texteLigne(l) {
+  return `${l.nom_produit}${l.taille ? ` (${l.taille})` : ''} ×${l.quantite}`
+}
+
 // Résumé textuel des lignes d'une commande ("T-shirt (M) ×2, Casquette ×1"),
-// utilisé partout où on affiche une commande sans ouvrir son détail complet.
+// utilisé là où on affiche une commande sans ouvrir son détail complet (ex.
+// confirmation d'annulation).
 function resumeLignes(lignes) {
   if (!lignes || lignes.length === 0) return '—'
-  return lignes
-    .map((l) => `${l.nom_produit}${l.taille ? ` (${l.taille})` : ''} ×${l.quantite}`)
-    .join(', ')
+  return lignes.map(texteLigne).join(', ')
+}
+
+// Même résumé, mais un article par ligne (saut de ligne) : plus lisible pour
+// les responsables qui préparent les sacs de commande.
+function resumeLignesMultiligne(lignes) {
+  if (!lignes || lignes.length === 0) return '—'
+  return lignes.map((l, i) => <div key={i}>{texteLigne(l)}</div>)
 }
 
 // Écran « Commande » : n'importe quel bénévole peut y noter la demande
@@ -746,7 +757,7 @@ export default function Commande({ benevole }) {
                         )}
                       </td>
                       <td>{c.telephone_client}</td>
-                      <td style={{ maxWidth: 260 }}>{resumeLignes(c.lignes)}</td>
+                      <td style={{ maxWidth: 260 }}>{resumeLignesMultiligne(c.lignes)}</td>
                       <td>{c.benevole_nom || '—'}</td>
                       <td>
                         {c.origine === 'public' ? (
