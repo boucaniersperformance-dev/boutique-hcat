@@ -8,6 +8,7 @@ import {
 } from '../constants.js'
 import CommandeAjoutModal from '../components/CommandeAjoutModal.jsx'
 import IntroVideo from '../components/IntroVideo.jsx'
+import InstallerAppli from '../components/InstallerAppli.jsx'
 import { estProduitGourde } from '../components/GourdePerso/poses.js'
 
 // Même règle de détection que l'écran Vente (voir estProduitGourde dans
@@ -316,6 +317,34 @@ export default function CommandePublique() {
     )
   }
 
+  // --- Onglet actif de la page : « Commander » (catalogue + fiche client,
+  // comportement historique) ou « Suivi commande » (retrouver une commande
+  // déjà déposée par numéro de téléphone, sans compte ni mot de passe).
+  const [ongletActif, setOngletActif] = useState('commander')
+
+  // --- Suivi commande : recherche par téléphone (même principe que la
+  // recherche utilisée pour l'annulation, mais avec le statut complet).
+  const [telephoneSuivi, setTelephoneSuivi] = useState('')
+  const [rechercheSuiviEnCours, setRechercheSuiviEnCours] = useState(false)
+  const [erreurRechercheSuivi, setErreurRechercheSuivi] = useState(null)
+  const [commandesSuivi, setCommandesSuivi] = useState(null) // null = pas encore cherché
+
+  async function rechercherSuivi() {
+    if (!telephoneValide(telephoneSuivi)) return
+    setRechercheSuiviEnCours(true)
+    setErreurRechercheSuivi(null)
+    setCommandesSuivi(null)
+    const { data, error } = await supabase.rpc('suivre_commandes_par_telephone', {
+      p_telephone: telephoneSuivi.trim(),
+    })
+    setRechercheSuiviEnCours(false)
+    if (error) {
+      setErreurRechercheSuivi(error.message || 'La recherche a échoué. Réessaie.')
+      return
+    }
+    setCommandesSuivi(data || [])
+  }
+
   if (introVisible) {
     return <IntroVideo onTerminer={() => setIntroVisible(false)} />
   }
@@ -337,6 +366,8 @@ export default function CommandePublique() {
 
   return (
     <div className="app">
+      <InstallerAppli />
+
       <header className="entete">
         <div className="entete-titre">
           <img src="/logo.png" alt="" className="logo-entete" />
@@ -345,6 +376,103 @@ export default function CommandePublique() {
       </header>
 
       <main className="contenu">
+        <div className="onglets-commande-publique">
+          <button
+            type="button"
+            className={`onglet-bouton${ongletActif === 'commander' ? ' actif' : ''}`}
+            onClick={() => setOngletActif('commander')}
+          >
+            🛍️ Commander
+          </button>
+          <button
+            type="button"
+            className={`onglet-bouton${ongletActif === 'suivi' ? ' actif' : ''}`}
+            onClick={() => setOngletActif('suivi')}
+          >
+            📦 Suivi commande
+          </button>
+        </div>
+
+        {ongletActif === 'suivi' && (
+          <div className="bloc">
+            <p style={{ color: 'var(--texte-clair)', marginBottom: 16 }}>
+              Entre le numéro de téléphone utilisé lors de ta commande pour retrouver son
+              statut (préparation et paiement).
+            </p>
+            <div className="champ" style={{ maxWidth: 280 }}>
+              <label>Ton numéro de téléphone *</label>
+              <input
+                type="tel"
+                value={telephoneSuivi}
+                onChange={(e) => {
+                  setTelephoneSuivi(e.target.value)
+                  setCommandesSuivi(null)
+                  setErreurRechercheSuivi(null)
+                }}
+                placeholder="06 12 34 56 78"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') rechercherSuivi()
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              className="bouton-secondaire"
+              style={{ marginTop: 10 }}
+              disabled={!telephoneValide(telephoneSuivi) || rechercheSuiviEnCours}
+              onClick={rechercherSuivi}
+            >
+              {rechercheSuiviEnCours ? 'Recherche…' : '🔍 Rechercher mes commandes'}
+            </button>
+
+            {erreurRechercheSuivi && <p className="erreur">{erreurRechercheSuivi}</p>}
+
+            {commandesSuivi !== null && commandesSuivi.length === 0 && (
+              <p style={{ color: 'var(--texte-clair)', marginTop: 10 }}>
+                Aucune commande trouvée avec ce numéro de téléphone. Vérifie le numéro, ou
+                contacte directement un(e) responsable du club.
+              </p>
+            )}
+
+            {commandesSuivi !== null && commandesSuivi.length > 0 && (
+              <div style={{ marginTop: 16, maxWidth: 520 }}>
+                {commandesSuivi.map((c) => (
+                  <div className="suivi-commande-carte" key={c.numero_commande}>
+                    <div className="suivi-commande-entete">
+                      <span className="suivi-commande-numero">{c.numero_commande}</span>
+                      <span className="suivi-commande-date">
+                        {new Date(c.created_at).toLocaleDateString('fr-FR')}
+                      </span>
+                    </div>
+                    <div className="suivi-commande-articles">
+                      {(c.lignes || []).map((l, i) => (
+                        <div key={i}>
+                          {l.nom_produit}
+                          {l.taille ? ` (${l.taille})` : ''} ×{l.quantite}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="suivi-commande-badges">
+                      <span
+                        className={`suivi-commande-badge ${c.statut === 'traitee' ? 'pret' : 'attente'}`}
+                      >
+                        {c.statut === 'traitee' ? '✓ Prête' : 'En préparation'}
+                      </span>
+                      <span
+                        className={`suivi-commande-badge ${c.statut_paiement === 'payee' ? 'payee' : 'a-regler'}`}
+                      >
+                        {c.statut_paiement === 'payee' ? '✓ Payée' : 'À régler'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {ongletActif === 'commander' && (
+        <>
         <div className="bloc">
           <p style={{ color: 'var(--texte-clair)', marginBottom: 8 }}>
             Pour un article qui n'est pas disponible tout de suite (taille
@@ -707,6 +835,8 @@ export default function CommandePublique() {
           mois maximum après traitement avant suppression automatique. Pour consulter, corriger
           ou faire supprimer ces informations avant ce délai, contacte un responsable du club.
         </p>
+        </>
+        )}
       </main>
 
       <footer className="pied-page">
