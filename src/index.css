@@ -1760,6 +1760,170 @@ table.tableau-admin .panneau-edition input[type="text"] {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
 }
 
+/* ---------------------------------------------------------------------
+   Onglets de la page publique de commande (« Commander » / « Suivi
+   commande »).
+--------------------------------------------------------------------- */
+.onglets-commande-publique {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.onglet-bouton {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 2px solid var(--bordure);
+  background: var(--carte);
+  color: var(--texte-clair);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.onglet-bouton.actif {
+  border-color: var(--bleu);
+  background: var(--bleu);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------
+   Suivi commande : carte de résultat par commande trouvée.
+--------------------------------------------------------------------- */
+.suivi-commande-carte {
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
+  background: var(--carte);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.suivi-commande-entete {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.suivi-commande-numero {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.suivi-commande-date {
+  color: var(--texte-clair);
+  font-size: 0.8rem;
+}
+
+.suivi-commande-articles {
+  color: var(--texte-clair);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.suivi-commande-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.suivi-commande-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.suivi-commande-badge.pret,
+.suivi-commande-badge.payee {
+  background: #e3f5f2;
+  color: var(--vert);
+}
+
+.suivi-commande-badge.attente,
+.suivi-commande-badge.a-regler {
+  background: #fdeee0;
+  color: var(--orange);
+}
+
+/* ---------------------------------------------------------------------
+   Bannière « Installer sur l'écran d'accueil » (page publique de
+   commande), et instructions manuelles iOS (pas d'invite automatique sur
+   ce système).
+--------------------------------------------------------------------- */
+.bandeau-installer {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--bleu);
+  color: #fff;
+  padding: 10px 16px;
+}
+
+.bandeau-installer-contenu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 220px;
+}
+
+.bandeau-installer-icone {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.bandeau-installer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bandeau-installer-actions .bouton-principal {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+}
+
+.bandeau-installer-actions .bouton-icone {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.instructions-ios-fond {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.instructions-ios-carte {
+  background: var(--carte);
+  color: var(--texte);
+  border-radius: 14px;
+  padding: 22px 24px;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
 .intro-video-passer {
   margin-top: 18px;
   color: rgba(255, 255, 255, 0.75);
