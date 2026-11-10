@@ -8,6 +8,8 @@ import {
 } from '../constants.js'
 import CommandeAjoutModal from '../components/CommandeAjoutModal.jsx'
 import PaiementModal from '../components/PaiementModal.jsx'
+import FinaliserCommandeModal from '../components/FinaliserCommandeModal.jsx'
+import CalendrierRetraitAdmin from '../components/CalendrierRetraitAdmin.jsx'
 import { useFermetureRetour } from '../lib/useFermetureRetour.js'
 
 function telephoneValide(t) {
@@ -40,6 +42,36 @@ function resumeLignes(lignes) {
 function resumeLignesMultiligne(lignes) {
   if (!lignes || lignes.length === 0) return '—'
   return lignes.map((l, i) => <div key={i}>{texteLigne(l)}</div>)
+}
+
+// Formate une date Postgres ("2026-11-16") en français, sans dépendre du
+// fuseau horaire du navigateur.
+function formatDateRetrait(dateStr) {
+  if (!dateStr) return null
+  const [annee, mois, jour] = dateStr.split('-').map(Number)
+  const d = new Date(annee, mois - 1, jour)
+  return d.toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+// Lien sms: pré-rempli pour prévenir le client que sa commande est prête,
+// sans passer par l'email (utile si aucune adresse n'a été renseignée, ou
+// en complément) — envoyé depuis le numéro personnel du/de la responsable,
+// juste pour lui éviter d'avoir à retaper le numéro et le message.
+function lienSmsCommandePrete(commande) {
+  const tel = String(commande.telephone_client || '').replace(/\s+/g, '')
+  const dateTxt = formatDateRetrait(commande.date_retrait_prevue)
+  const message =
+    `Bonjour ${commande.prenom_client}, ta commande ${commande.numero_commande || ''} est prête ! ` +
+    (dateTxt
+      ? `Rendez-vous le ${dateTxt} pour la récupérer.`
+      : 'Passe la récupérer quand tu veux.') +
+    ' Paiement à la récupération. Les Boucaniers HCAT'
+  return `sms:${tel}?body=${encodeURIComponent(message)}`
 }
 
 // Écran « Commande » : n'importe quel bénévole peut y noter la demande
@@ -200,6 +232,13 @@ export default function Commande({ benevole }) {
   const [paiementCommandeOuvert, setPaiementCommandeOuvert] = useState(false)
   const [paiementEnCours, setPaiementEnCours] = useState(false)
   const [erreurPaiement, setErreurPaiement] = useState(null)
+
+  // --- Finalisation d'une commande (date de retrait + notification) ---
+  const [finalisationOuverte, setFinalisationOuverte] = useState(false)
+  const [finalisationEnCours, setFinalisationEnCours] = useState(false)
+  const [erreurFinalisation, setErreurFinalisation] = useState(null)
+  const [matchsRetrait, setMatchsRetrait] = useState([])
+  const [chargementMatchsRetrait, setChargementMatchsRetrait] = useState(false)
 
   useFermetureRetour(!!commandeDetail, () => {
     if (!paiementEnCours) {
@@ -513,6 +552,45 @@ export default function Commande({ benevole }) {
     await rafraichirEtResynchroniser(commandeDetail.id)
   }
 
+  // Ouvre la modale de finalisation : charge d'abord les prochains matchs à
+  // domicile parmi lesquels choisir la date de retrait.
+  async function ouvrirFinalisation() {
+    setErreurFinalisation(null)
+    setFinalisationOuverte(true)
+    setChargementMatchsRetrait(true)
+    const { data, error } = await supabase.rpc('lister_matchs_domicile_retrait', {
+      p_benevole_id: benevole.id,
+    })
+    setChargementMatchsRetrait(false)
+    if (error) {
+      setErreurFinalisation('Impossible de charger les matchs à domicile.')
+      setMatchsRetrait([])
+    } else {
+      setMatchsRetrait(data || [])
+    }
+  }
+
+  // Finalise la commande (date de retrait choisie) : la base vérifie que
+  // tous les articles sont déjà cochés prêts, met à jour le statut et
+  // envoie automatiquement l'email de notification au client.
+  async function validerFinalisation(dateRetrait) {
+    if (!commandeDetail) return
+    setFinalisationEnCours(true)
+    setErreurFinalisation(null)
+    const { error } = await supabase.rpc('finaliser_commande', {
+      p_benevole_id: benevole.id,
+      p_commande_id: commandeDetail.id,
+      p_date_retrait: dateRetrait,
+    })
+    setFinalisationEnCours(false)
+    if (error) {
+      setErreurFinalisation(error.message || 'La finalisation a échoué. Réessaie.')
+      return
+    }
+    setFinalisationOuverte(false)
+    await rafraichirEtResynchroniser(commandeDetail.id)
+  }
+
   return (
     <>
       <div className="bloc">
@@ -769,7 +847,14 @@ export default function Commande({ benevole }) {
                       <td>{new Date(c.created_at).toLocaleString('fr-FR')}</td>
                       <td>
                         {c.statut === 'traitee' ? (
-                          <span style={{ color: 'var(--vert)', fontWeight: 700 }}>✓ Prête</span>
+                          <span style={{ color: 'var(--vert)', fontWeight: 700 }}>
+                            ✓ Prête
+                            {c.date_retrait_prevue && (
+                              <div style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--texte-clair)' }}>
+                                Retrait le {formatDateRetrait(c.date_retrait_prevue)}
+                              </div>
+                            )}
+                          </span>
                         ) : (
                           <span style={{ color: 'var(--orange)', fontWeight: 700 }}>En attente</span>
                         )}
@@ -805,6 +890,8 @@ export default function Commande({ benevole }) {
           )}
         </div>
       )}
+
+      {estResponsable && <CalendrierRetraitAdmin benevoleId={benevole.id} />}
 
       <div className="bloc" style={{ marginTop: 32 }}>
         <h3 style={{ marginBottom: 10 }}>Objet de la commande</h3>
@@ -998,7 +1085,15 @@ export default function Commande({ benevole }) {
             <div className="detail-commande-statuts">
               <span>
                 {commandeDetail.statut === 'traitee' ? (
-                  <span style={{ color: 'var(--vert)', fontWeight: 700 }}>✓ Commande prête</span>
+                  <span style={{ color: 'var(--vert)', fontWeight: 700 }}>
+                    ✓ Commande prête
+                    {commandeDetail.date_retrait_prevue && (
+                      <>
+                        {' '}
+                        · Retrait le {formatDateRetrait(commandeDetail.date_retrait_prevue)}
+                      </>
+                    )}
+                  </span>
                 ) : (
                   <span style={{ color: 'var(--orange)', fontWeight: 700 }}>Préparation en attente</span>
                 )}
@@ -1018,6 +1113,9 @@ export default function Commande({ benevole }) {
             </div>
 
             {erreurPaiement && <p className="erreur">{erreurPaiement}</p>}
+            {erreurFinalisation && !finalisationOuverte && (
+              <p className="erreur">{erreurFinalisation}</p>
+            )}
 
             <div className="modale-actions">
               <button className="bouton-secondaire" onClick={fermerDetail}>
@@ -1034,6 +1132,33 @@ export default function Commande({ benevole }) {
                   💳 Payer
                 </button>
               )}
+              {commandeDetail.statut !== 'traitee' && (
+                <button
+                  className="bouton-principal"
+                  disabled={
+                    (commandeDetail.lignes || []).length === 0 ||
+                    !commandeDetail.lignes.every((l) => l.pret)
+                  }
+                  title={
+                    (commandeDetail.lignes || []).length > 0 &&
+                    !commandeDetail.lignes.every((l) => l.pret)
+                      ? "Coche d'abord tous les articles comme prêts"
+                      : undefined
+                  }
+                  onClick={ouvrirFinalisation}
+                >
+                  ✅ Finaliser la commande
+                </button>
+              )}
+              {commandeDetail.statut === 'traitee' &&
+                telephoneValide(commandeDetail.telephone_client) && (
+                  <a
+                    className="bouton-secondaire"
+                    href={lienSmsCommandePrete(commandeDetail)}
+                  >
+                    💬 Envoyer un SMS
+                  </a>
+                )}
             </div>
           </div>
         </div>
@@ -1045,6 +1170,17 @@ export default function Commande({ benevole }) {
           enCours={paiementEnCours}
           onFermer={() => setPaiementCommandeOuvert(false)}
           onValider={validerPaiementCommande}
+        />
+      )}
+
+      {finalisationOuverte && commandeDetail && (
+        <FinaliserCommandeModal
+          matchs={matchsRetrait}
+          chargementMatchs={chargementMatchsRetrait}
+          erreur={erreurFinalisation}
+          enCours={finalisationEnCours}
+          onFermer={() => setFinalisationOuverte(false)}
+          onValider={validerFinalisation}
         />
       )}
 
